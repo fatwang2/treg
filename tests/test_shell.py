@@ -581,3 +581,92 @@ def test_with_runs_the_program_for_real_and_passes_args_and_exit_code(monkeypatc
     body = out.read_text()
     assert "a b\n--flag\n" in body                    # spaces survive; no re-splitting
     assert "127.0.0.1:18800" in body                  # the child really saw the proxy
+
+
+# ---- the certificate library: offered, not just described ----------------------------------
+def test_the_install_hint_matches_how_treg_was_installed(monkeypatch):
+    """`pip install "tools-registry[proxy]"` is right for exactly ONE of the four ways people install
+    treg — and the installer's own way is not it. A uv-tool or Homebrew venv is not on the ambient
+    pip's path, so that advice silently does nothing."""
+    monkeypatch.setattr(cli.importlib.util, "find_spec", lambda n: object() if n == "pip" else None)
+    for prefix, label in {"/opt/homebrew/Cellar/treg/0.6.0/libexec": "Homebrew",
+                          "/Users/x/venv": "pip"}.items():
+        monkeypatch.setattr(cli.sys, "prefix", prefix)
+        got, argv = cli._proxy_install_hint()
+        assert got == label and argv[:3] == [cli.sys.executable, "-m", "pip"]
+        assert argv[-1] == "cryptography>=43"
+
+
+def test_a_pip_less_environment_uses_uv_instead(monkeypatch):
+    """Found by running it: a `uv venv` has NO pip, so the obvious `python -m pip install` fails with
+    'No module named pip'. Probing beats guessing from the path."""
+    monkeypatch.setattr(cli.importlib.util, "find_spec", lambda n: None)
+    monkeypatch.setattr(cli.shutil, "which", lambda n: "/usr/bin/uv" if n == "uv" else None)
+    monkeypatch.setattr(cli.sys, "prefix", "/Users/x/.local/share/uv/tools/tools-registry")
+    label, argv = cli._proxy_install_hint()
+    assert label == "uv tool"
+    assert argv[:2] == ["uv", "pip"] and cli.sys.executable in argv
+
+
+def test_pipx_is_injected_not_pip_installed(monkeypatch):
+    monkeypatch.setattr(cli.sys, "prefix", "/Users/x/.local/pipx/venvs/tools-registry")
+    monkeypatch.setattr(cli.shutil, "which", lambda n: f"/usr/bin/{n}" if n == "pipx" else None)
+    label, argv = cli._proxy_install_hint()
+    assert label == "pipx" and argv[:2] == ["pipx", "inject"]
+
+
+def test_an_environment_with_no_installer_says_so(monkeypatch):
+    """Nothing to install with: say that plainly instead of running a command that cannot exist."""
+    monkeypatch.setattr(cli.importlib.util, "find_spec", lambda n: None)
+    monkeypatch.setattr(cli.shutil, "which", lambda n: None)
+    monkeypatch.setattr(cli.sys, "prefix", "/opt/weird")
+    assert cli._proxy_install_hint()[1] == []
+    _hide_cryptography(monkeypatch)
+    with pytest.raises(SystemExit) as exc:
+        cli.ensure_proxy_dependency(assume_yes=True)
+    assert "no installer" in str(exc.value)
+
+
+def test_nothing_happens_when_the_library_is_already_there():
+    cli.ensure_proxy_dependency()          # cryptography is installed in the test env — must be silent
+
+
+def _hide_cryptography(monkeypatch):
+    """Pretend the certificate library is not installed, without uninstalling it."""
+    import builtins
+    real = builtins.__import__
+
+    def _fake(name, *a, **k):
+        if name == "cryptography":
+            raise ModuleNotFoundError(name)
+        return real(name, *a, **k)
+
+    monkeypatch.setattr(builtins, "__import__", _fake)
+
+
+def test_a_non_interactive_run_prints_the_command_instead_of_prompting(monkeypatch):
+    """In CI or a pipe there is nobody to answer, so it must exit saying exactly what to run — never
+    hang on a prompt nobody can see."""
+    _hide_cryptography(monkeypatch)
+    monkeypatch.setattr(cli.sys.stdin, "isatty", lambda: False)
+    with pytest.raises(SystemExit) as exc:
+        cli.ensure_proxy_dependency()
+    assert "cryptography>=43" in str(exc.value)
+
+
+def test_declining_leaves_the_command_behind(monkeypatch):
+    _hide_cryptography(monkeypatch)
+    monkeypatch.setattr(cli.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda _p: "n")
+    monkeypatch.setattr(cli.subprocess, "call", lambda *a, **k: pytest.fail("must not install"))
+    with pytest.raises(SystemExit) as exc:
+        cli.ensure_proxy_dependency()
+    assert "cryptography>=43" in str(exc.value)
+
+
+def test_a_failed_install_says_so_rather_than_carrying_on(monkeypatch):
+    _hide_cryptography(monkeypatch)
+    monkeypatch.setattr(cli.subprocess, "call", lambda *a, **k: 1)
+    with pytest.raises(SystemExit) as exc:
+        cli.ensure_proxy_dependency(assume_yes=True)
+    assert "did not work" in str(exc.value)

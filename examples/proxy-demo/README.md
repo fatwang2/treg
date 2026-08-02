@@ -9,8 +9,6 @@ parent process.
 ## Run it
 
 ```bash
-pip install "tools-registry[proxy]"     # the certificate library; not part of the light CLI
-
 node server.js          # plain: the call goes out as-is
 treg node server.js     # the same code, credentialed by your team
 ```

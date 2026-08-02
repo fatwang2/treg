@@ -68,7 +68,8 @@ automatically: `treg shell start`, then use `stripe`, `gh`, … normally (no `tr
 with the team's credentials. treg is the parent process, so only that command and its children are
 affected: `treg claude` uses shared team access, plain `claude` is untouched and uses your own local
 keys. Nothing is written to any config file. A registered host is credentialed by the server; every
-other address goes straight out unread. Needs `pip install "tools-registry[proxy]"`.
+other address goes straight out unread. It needs the `cryptography` package: the installer includes
+it, and if it is missing treg offers to add it (the right way for how treg was installed) on first use.
 **If you are writing Node:** the built-in `fetch` ignores proxy settings before **Node 24**, so a plain
 `fetch()` on older Node is NOT captured and your call goes out with no credential. Use a client that
 reads the environment (axios, got, undici `ProxyAgent`) or upgrade to Node 24+. curl, git, python
@@ -80,7 +81,7 @@ treg code; the call goes through the registry, which injects the credential **on
 answer comes back unchanged. Only registered hosts are touched — every other address (including
 `api.anthropic.com` / `api.openai.com`) goes straight out and cannot be read. It works by setting
 `HTTPS_PROXY` and a trust bundle for that shell only; the system trust store is never modified, and no
-vendor key ever reaches the machine. Needs `pip install "tools-registry[proxy]"`. `--proxy-port N` moves
+vendor key ever reaches the machine. `--proxy-port N` moves
 the listener off 18791, `--renew-ca` regenerates the machine's local certificate authority. A
 certificate-pinned client will refuse the interception and must use `treg run` or `treg call` instead.
 

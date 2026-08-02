@@ -98,7 +98,8 @@ def _require_cryptography():
     except ModuleNotFoundError as exc:  # pragma: no cover - exercised by hand, not in CI
         raise ProxyDependencyError(
             "the local proxy needs the certificate library, which is not part of the light CLI.\n"
-            '  Install it with:  pip install "tools-registry[proxy]"'
+            "  Run this from a terminal and treg offers to install it the right way for your install,\n"
+            '  or add it by hand:  pip install "tools-registry[proxy]"'
         ) from exc
     return x509, hashes, serialization, ec, NameOID
 

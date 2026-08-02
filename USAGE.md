@@ -189,14 +189,16 @@ key.
 Put `treg` in front of any command:
 
 ```bash
-pip install "tools-registry[proxy]"   # the certificate library; not in the light CLI
-
 treg claude                  # a Claude Code session using the team's shared credentials
 treg codex                   # same for Codex
 treg node server.js          # your app, with the team's keys, without holding any
 treg python train.py
 treg with -- npm test        # the explicit form, for anything that confuses the parser
 ```
+
+The proxy needs one compiled package (`cryptography`) to generate this machine's certificate
+authority. The `install.sh` installer includes it; if you installed with plain `pip` and it is
+missing, treg offers to add it the right way for your install the first time you use the feature.
 
 **This is opt-in per command, and that is the point.** treg is the parent process, so the setting
 applies to that command and its children only. `treg claude` uses the team's shared access; plain
@@ -229,7 +231,6 @@ routed through the registry, which adds the credential **on the server** and ret
 unchanged. Your code needs no key and no treg-specific lines:
 
 ```bash
-pip install "tools-registry[proxy]"      # the certificate library; not in the light CLI
 treg shell start --proxy                 # the banner lists the hosts being captured
 curl https://api.stripe.com/v1/balance   # no key anywhere — treg injected it server-side
 python my_script.py                      # same for anything the script calls

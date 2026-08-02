@@ -17,6 +17,8 @@ from __future__ import annotations
 import argparse
 import base64
 import contextlib
+import importlib
+import importlib.util
 import itertools
 import getpass
 import json
@@ -2620,12 +2622,93 @@ def cmd_setup_local_run(args, cfg) -> None:
 
 
 # ---- shell mode: transparent CLI interception (`treg shell`) -------------------------------
+_PROXY_PKG = "cryptography>=43"
+
+
+def _proxy_install_hint() -> tuple[str, list[str]]:
+    """How to add the certificate library to **this** copy of treg: `(human label, argv)`.
+
+    `pip install "tools-registry[proxy]"` is the right answer for exactly one of the four ways people
+    install treg, and the installer's own way is not it: a uv-tool or Homebrew venv is not on the
+    ambient `pip`'s path, so that advice silently does nothing and the user is left with a working
+    install and a broken feature.
+
+    This **probes** instead of guessing from the path, because guessing was wrong: a `uv venv` has no
+    `pip` at all, so `python -m pip install` there fails with "No module named pip". Order: the
+    environment's own pip when it has one (works for pip, venv, Homebrew), then `uv` (which installs
+    into any environment by path), then pipx. An empty argv means we found no way to do it."""
+    prefix = sys.prefix
+    if "/pipx/venvs/" in prefix and shutil.which("pipx"):
+        return "pipx", ["pipx", "inject", "tools-registry", _PROXY_PKG]
+    if importlib.util.find_spec("pip") is not None:
+        label = "Homebrew" if ("/Cellar/" in prefix or "/homebrew/" in prefix) else "pip"
+        return label, [sys.executable, "-m", "pip", "install", _PROXY_PKG]
+    if shutil.which("uv"):
+        # uv tool / uv venv environments ship without pip; uv itself installs into them by path.
+        label = "uv tool" if "/uv/tools/" in prefix else "uv"
+        return label, ["uv", "pip", "install", "--python", sys.executable, _PROXY_PKG]
+    return "this", []
+
+
+def ensure_proxy_dependency(assume_yes: bool = False) -> None:
+    """Make sure the certificate library is importable, offering to install it if it is not.
+
+    The proxy is the one feature that needs a compiled dependency, and it is deliberately not in the
+    base install. Telling someone to run a command that does not work for their install method is
+    worse than not shipping the feature — so treg works out how it was installed and offers to do it,
+    in the right way, on the spot."""
+    try:
+        import cryptography  # noqa: F401
+        return
+    except ModuleNotFoundError:
+        pass
+
+    label, argv = _proxy_install_hint()
+    if not argv:
+        sys.exit("treg: the local proxy needs the `cryptography` package, and this environment has no "
+                 "installer (no pip, no uv, no pipx) to add it with. Install it however you manage "
+                 "this Python, or reinstall treg with:  pip install \"tools-registry[proxy]\"")
+    printable = " ".join(shlex.quote(a) for a in argv)
+    print(f"\n{_A}▚ treg{_R} {_M}— the local proxy needs one more piece: the certificate library that "
+          f"generates{_R}", file=sys.stderr)
+    print(f"  {_M}this machine's certificate authority. It is not in the base install because it is{_R}",
+          file=sys.stderr)
+    print(f"  {_M}compiled, and `pip install tools-registry` is meant to stay light.{_R}\n", file=sys.stderr)
+    if not assume_yes and not sys.stdin.isatty():
+        sys.exit(f"treg: install it for this {label} install with:\n  {printable}")
+    if not assume_yes:
+        try:
+            answer = input(f"  Install it now for this {label} install? [Y/n] ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            sys.exit("\ntreg: cancelled.")
+        if answer not in ("", "y", "yes"):
+            sys.exit(f"treg: no problem. When you want it:\n  {printable}")
+
+    print(f"  {_M}{printable}{_R}", file=sys.stderr)
+    try:
+        code = subprocess.call(argv)  # noqa: S603 — argv list, no shell
+    except FileNotFoundError:
+        sys.exit(f"treg: {argv[0]!r} is not on your PATH. Install it by hand with:\n  {printable}")
+    if code != 0:
+        sys.exit(f"treg: that did not work (exit {code}). Try it by hand:\n  {printable}")
+
+    # The package landed in THIS interpreter's environment, so it is importable now — but only after
+    # the import system is told to look again.
+    importlib.invalidate_caches()
+    try:
+        import cryptography  # noqa: F401
+    except ModuleNotFoundError:
+        sys.exit("treg: installed, but still not importable here. Try the command again in a new shell.")
+    print(f"  {_G}✓{_R} {_M}ready.{_R}\n", file=sys.stderr)
+
+
 def _start_proxy_handle(cfg, tools: list[dict], *, port: int | None = None, renew_ca: bool = False):
     """Bring up the local proxy and return `(handle, hosts, treg_host)`. Shared by both front doors:
     `treg shell start --proxy` (dies with the subshell) and `treg serve` (a daemon other terminals
     point at). The allow-list is seeded from the tool listing the caller already fetched, so turning
     the proxy on costs no extra request."""
     from . import localproxy as lpx
+    ensure_proxy_dependency()          # offers to install it rather than printing advice that fails
     try:
         ca = lpx.ensure_ca(renew=renew_ca)
     except lpx.ProxyDependencyError as exc:
@@ -2665,8 +2748,15 @@ def _start_local_proxy(args, cfg, tools: list[dict]):
 
 
 def _proxy_tools(cfg) -> list[dict]:
-    with _client(cfg) as c:
-        r = c.get("/tools")
+    """The tools whose hosts the proxy should capture. A registry we cannot reach is a plain sentence,
+    not a traceback: the user has done nothing wrong and there is an obvious thing to check."""
+    base = os.environ.get("TREG_URL") or cfg.get("base_url", "")
+    try:
+        with _client(cfg) as c:
+            r = c.get("/tools")
+    except httpx.HTTPError as exc:
+        sys.exit(f"treg: cannot reach the registry at {base} ({type(exc).__name__}). "
+                 f"Check it is up, or `treg config --base-url <url>`.")
     if r.status_code >= 400:
         _show(r)  # exits non-zero
     return r.json()
@@ -2690,6 +2780,7 @@ def _serve_daemon(args, cfg) -> None:
     told to stop. On the way out the state file goes with it, so `status` can never claim a proxy
     that is not there."""
     from . import localproxy as lpx
+    ensure_proxy_dependency()
     handle, hosts, treg_host = _start_proxy_handle(
         cfg, _proxy_tools(cfg), port=args.port, renew_ca=args.renew_ca)
     base = os.environ.get("TREG_URL") or cfg["base_url"]
@@ -2812,6 +2903,7 @@ def cmd_with(args, cfg) -> None:
     from . import localproxy as lpx
     from . import shell as sh
 
+    ensure_proxy_dependency()          # local + instant; ask before we go near the network
     cmd = [args.command, *args.args]
     exe = shutil.which(cmd[0])
     if not exe:

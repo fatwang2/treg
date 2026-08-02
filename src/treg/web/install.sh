@@ -6,7 +6,13 @@ set -e
 BASE="{BASE}"
 # Install from PyPI (fast, public, no git clone). The base package is the light CLI; the FastAPI/DB
 # server stack is the `tools-registry[server]` extra, which people who self-host install separately.
-SRC="tools-registry"
+#
+# `[proxy]` is included here on purpose. It adds only `cryptography`, which is what `treg <command>`
+# needs to generate this machine's certificate authority — and it ships as a prebuilt wheel, so there
+# is no compiler and no meaningful wait. Without it the headline feature (`treg claude`) stops on its
+# first run asking to be installed, which is a bad first minute. `pip install tools-registry` stays
+# light for anyone who wants only the plain CLI.
+SRC="tools-registry[proxy]"
 
 printf '\n\033[38;5;173m▚ tools-registry\033[0m - installing the treg CLI…\n\n'
 
