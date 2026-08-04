@@ -63,6 +63,12 @@ class OAuthProvider:
     # `?key=…`, not a header. Drives both the connect-time probe and the provisioned tool's binding.
     token_location: str = "header"  # "header" | "query"
     token_param: str = ""  # query-param name when token_location == "query" (Semrush: "key")
+    # Shown on the provider page and in the capability modal, i.e. everywhere Connect can be
+    # clicked, BEFORE the consent popup opens. For providers whose consent screen names something
+    # the user has not seen on treg: the Meta app is registered as "Crewlet", a sibling product, so
+    # without this the popup asks them to authorize a stranger. Meta Developer Policy 1.6 wants the
+    # relationship disclosed at the point of consent, not in a docs link.
+    consent_notice: str = ""
     setup_url: str = ""  # one-click app creation, pre-filled where the platform supports it
     setup_action_label: str = ""
     setup_steps: tuple[str, ...] = ()
@@ -630,6 +636,15 @@ _META_AUTH = "https://www.facebook.com/v25.0/dialog/oauth"
 _META_TOKEN = "https://graph.facebook.com/v25.0/oauth/access_token"
 _META_BASE = "https://graph.facebook.com/v25.0"
 
+# The Meta app behind all three providers is registered as "Crewlet" — a sibling product from the
+# same company — and Facebook's consent screen renders only that bare app name, with no parent
+# business. Someone who came here for treg would be asked to authorize a product they have never
+# heard of. Say so before they click Connect, not after.
+_META_CONSENT_NOTICE = (
+    "You'll be taken to Facebook and see Crewlet, our Meta app by Superdesign Dev Inc. "
+    "treg and Crewlet share one Meta integration."
+)
+
 # pages_show_list is the floor for BOTH providers: it is what returns the Page list, and an
 # Instagram professional account is only reachable *through* the Page it is linked to.
 _FB_READ = ["pages_show_list", "pages_read_engagement", "read_insights"]
@@ -654,6 +669,7 @@ FACEBOOK = OAuthProvider(
     ),
     base_url=_META_BASE,
     docs_url="https://developers.facebook.com/docs/pages-api",
+    consent_notice=_META_CONSENT_NOTICE,
     auth_params={},  # Meta ignores Google's access_type/prompt; sending them just noises the URL
     long_lived_exchange=True,
     resource_label="Page",
@@ -691,6 +707,7 @@ INSTAGRAM = OAuthProvider(
     ),
     base_url=_META_BASE,
     docs_url="https://developers.facebook.com/docs/instagram-platform/instagram-graph-api",
+    consent_notice=_META_CONSENT_NOTICE,
     auth_params={},
     long_lived_exchange=True,
     resource_label="account",
@@ -726,6 +743,7 @@ META_ADS = OAuthProvider(
     ),
     base_url=_META_BASE,
     docs_url="https://developers.facebook.com/docs/marketing-apis",
+    consent_notice=_META_CONSENT_NOTICE,
     auth_params={},
     long_lived_exchange=True,
     resource_label="ad account",
@@ -1630,6 +1648,7 @@ def listing() -> list[dict]:
             "needs_extra_credential": p.needs_extra_credential,
             "base_url": p.base_url,
             "docs_url": p.docs_url,
+            "consent_notice": p.consent_notice,
             "configured": is_configured(p),
         }
         # Grouped first, alphabetical within a shelf — so the dashboard can render the shelves by

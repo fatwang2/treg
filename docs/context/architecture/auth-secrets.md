@@ -98,6 +98,14 @@ module symbols:
   `CATEGORY_ORDER`, each flagged `configured`, with per-capability scopes already in plain English via
   `scope_label()`/`SCOPE_LABELS` (a lookup keyed by the raw scope string;
   `test_every_requested_scope_has_a_plain_english_label` guards it).
+- `consent_notice` — one line the dashboard shows **before** the consent popup opens, for a provider
+  whose consent screen names something the user has not seen on treg. Only the Meta family carries one:
+  the shared Meta app is registered as **Crewlet**, a sibling product of the same company (Superdesign
+  Dev Inc), and Facebook renders only that bare app name with no parent business, so without the notice
+  a treg user is asked to authorize a stranger. It rides `listing()` like any other provider field, so
+  the UI never hard-codes which services get one; `test_only_the_meta_family_carries_a_consent_notice`
+  derives the set from `auth_uri == _META_AUTH` rather than a service list. Meta Developer Policy 1.6
+  wants the relationship disclosed at the point of consent, which is why this is not a docs link.
 - **Scopes are per CAPABILITY, not per provider** (`scopes: dict[capability -> list[scope]]`). Capabilities
   are cumulative supersets (write ⊇ read); `default_capability` is the **broadest** (an agent product needs
   write eventually, so one honest consent screen beats connecting twice). `scopes_for()` /

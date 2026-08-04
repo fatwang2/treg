@@ -247,6 +247,15 @@ tool name so an agent can call a specific one), their health/expiry chips, and a
 (`mkGranted` marks which capabilities are already granted; `scope_detail` gives the exact upstream scopes
 on hover).
 
+**Consent disclosure.** A provider row may carry a **`consent_notice`**, rendered as a `.mk-notice` panel
+in two places: under the summary on the integration page (beside Connect) and inside the `capAsk` modal,
+i.e. everywhere the popup can be triggered from. It is a plain surface, not `.banner` — `.banner` is red
+and would read as a failure rather than something to read before consenting. Today only the Meta family
+(`facebook`, `instagram`, `meta-ads`) sets one: their shared Meta app is registered as **Crewlet**, so
+Facebook's consent screen shows a name the user never saw on treg. The template is `v-if`'d on the field,
+so nothing here names those three services; adding a notice is a registry edit (see
+`architecture/auth-secrets.md`), not a dashboard edit.
+
 **Connecting** (`startConnect` picks the shape): a **token** provider (`auth_kind==='token'` — "bring your
 own bot") opens the `tokenAsk` modal → `submitToken` → **`POST /connections/token`** (`connect_with_token`);
 a provider with 2+ capabilities opens the `capAsk` modal (`capLabel`/`capHelp` explain each, e.g. TikTok's
