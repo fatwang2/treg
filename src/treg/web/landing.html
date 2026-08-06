@@ -82,6 +82,8 @@ a{color:var(--teal);text-decoration:none}
 .kicker a{color:var(--teal)}
 .hero-h1{font-family:var(--display);font-weight:400;letter-spacing:0;margin:28px 0 0;
   font-size:clamp(30px,4.6vw,60px);line-height:1.16;position:relative;z-index:2}
+.hero-h1 .l2{font-size:.58em;display:inline-block;margin-top:.42em;color:var(--muted)}
+.hero-h1 .l2 .grad{color:var(--muted)}
 .grad{color:var(--ink)}
 .grad2{color:var(--teal)}
 p.sub{font-size:15px;line-height:1.65;color:var(--muted);max-width:620px;margin:22px auto 0}
@@ -485,10 +487,11 @@ footer{margin-top:150px;border-top:1px solid var(--line);position:relative;overf
     <span class="kicker rv">2,617 endpoints · 42 providers · <a href="https://github.com/superdesigndev/tools-registry" target="_blank" rel="noopener">open source ↗</a></span>
 
     <h1 class="hero-h1 rv">
-      <span class="grad">Turn</span>
+      <span class="grad">OpenRouter for agent tools</span><br>
+      <span class="l2"><span class="grad">Turn</span>
       <span class="agentslot" id="agentslot"></span>
-      <span class="grad">into</span><br>
-      <span class="roleslot" id="roleslot"><span class="rw" id="rolewheel"></span></span><span class="h1cursor"></span>
+      <span class="grad">into</span>
+      <span class="roleslot" id="roleslot"><span class="rw" id="rolewheel"></span></span><span class="h1cursor"></span></span>
     </h1>
 
     <!-- the story for the active role: agent → treg → toolbelt -->
