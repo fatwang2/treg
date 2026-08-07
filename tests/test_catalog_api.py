@@ -346,15 +346,15 @@ async def test_call_template_carries_method_and_body_for_a_post(clients: AsyncCl
 
 async def test_a_credit_price_is_served_in_usd_per_provider(clients: AsyncClient):
     """A "credit" is a provider-scoped unit, not a currency: scrapecreators credits carry a
-    published per-credit price and convert, PDL publishes none so its endpoints stay native."""
+    published per-credit price and convert, apollo publishes none so its endpoints stay native."""
     priced = (await clients.get("/catalog/endpoints/scrapecreators.x.v1-amazon-shop")).json()["endpoint"]["cost"]
     assert priced["currency"] == "credit" and priced["value"]
     assert priced["usd"] == round(priced["value"] * cs.load().credit_rates["scrapecreators"], 6)
     assert priced["usd"] > 0, "a credit rate exists, so the dashboard gets a comparable number"
 
-    native = (await clients.get("/catalog/endpoints/pdl.x.person-identify")).json()["endpoint"]["cost"]
+    native = (await clients.get("/catalog/endpoints/apollo.people.enrich")).json()["endpoint"]["cost"]
     assert native["currency"] == "credit" and native["value"]
-    assert cs.load().credit_rates["pdl"] is None
+    assert cs.load().credit_rates["apollo"] is None
     assert native["usd"] is None, "no published rate: display credits, never a guessed dollar"
 
 
