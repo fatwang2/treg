@@ -6329,12 +6329,15 @@ _PLATFORM_BODY_MAX = 8 * 1024 * 1024  # buffer ceiling for a metered response (A
 def _observed_cost_micro(provider: str, body: bytes) -> int | None:
     """The provider's OWN reported charge for this call, in micro-USD, or None when it doesn't say.
 
-    Two providers volunteer the number, in two different denominations:
+    Three providers volunteer the number, in two different denominations:
       - dataforseo: a top-level `cost` in USD — including 0 when it decided not to charge (a free
         route, or a request it rejected before metering). That zero is real information and settles the
         call at zero, which is why the test is `>= 0` and not truthiness.
-      - scrapecreators: `credits_charged`, converted through the provider's credit rate (fx.yaml) —
-        the same conversion `cost_view` uses, so a settle can't disagree with the catalog's price.
+      - scrapecreators (`credits_charged`) and akta (`credits_consumed`): provider credits, converted
+        through the provider's credit rate (fx.yaml) — the same conversion `cost_view` uses, so a
+        settle can't disagree with the catalog's price. Akta is the one that NEEDS this: its enrich
+        route is priced per SECTION requested and its news route adds a per-article rider, so the
+        catalog's single estimate can only be an upper bound — the actual charge lives here.
 
     Everyone else settles at the estimate. This is the same signal the catalog's `observed_cost`
     harvests, which is what lets phase 5's drift detector compare the two numbers directly."""
@@ -6351,9 +6354,9 @@ def _observed_cost_micro(provider: str, body: bytes) -> int | None:
         if isinstance(cost, (int, float)) and not isinstance(cost, bool) and cost >= 0:
             return int(cost * 1_000_000 + 0.5)
         return None
-    if provider == "scrapecreators":
-        credits = doc.get("credits_charged")
-        rate = catalog_store.load().credit_rates.get("scrapecreators")
+    if provider in ("scrapecreators", "akta"):
+        credits = doc.get("credits_charged" if provider == "scrapecreators" else "credits_consumed")
+        rate = catalog_store.load().credit_rates.get(provider)
         if isinstance(credits, (int, float)) and not isinstance(credits, bool) and credits >= 0 and rate:
             return int(credits * rate * 1_000_000 + 0.5)
         return None

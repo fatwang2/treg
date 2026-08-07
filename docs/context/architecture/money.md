@@ -155,7 +155,9 @@ are admin-scale windows over a bounded number of metered calls, the same tradeof
             → ledger.reserve (the UPDATE gate; 402 if short)
             → relay upstream
             → settle at the observed cost when the provider reports one
-              (dataforseo `cost`, scrapecreators `credits_charged`), else at the estimate;
+              (dataforseo `cost`, scrapecreators `credits_charged`, akta `credits_consumed` —
+              the last is what makes akta's per-section enrich billable: the estimate is an
+              upper bound, the settle is the real charge), else at the estimate;
               release instead when the call was not billable
 
 Closing the hold runs on its **own session** (the request's may be mid-rollback from the very error

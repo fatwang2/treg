@@ -218,5 +218,6 @@ endpoints:
     value: 0
     currency: USD
     unit: call
+    confidence: documented
     note: documented free — does not consume credits
   docs_url: https://docs.akta.pro/api-reference/supporting-apis/request-status

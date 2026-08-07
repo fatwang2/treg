@@ -58,16 +58,15 @@ endpoints:
       queryParams: {company: "canva.com", sections: "location"}
     cost:
       type: per_success
-      value: null
+      value: 17.5
       currency: credit
       per: 1
       unit: call
       source: docs
-      checked: '2026-07-28'
-      confidence: unknown
-      note: 'OBSERVED 2026-07-31: the test_request (sections=location) reported credits_consumed 0.50,
-        exactly the rate card''s per-section figure — the model is confirmed, but no single `value`
-        can express it, which is why this stays unknown. Priced PER SECTION requested: 2 credits each for firmographic, business_model, company_assessment, product_offering and technology; 1.5 for management_profile and strategic_signal; 1 for customer_profile and industry; 0.5 for trust_signal, company_hierarchy, digital_presence, financial_estimate and location; 5 for the Enterprise-only mna_and_investment. Credits are $0.05 pay-as-you-go, $0.04 on subscription.'
+      source_url: https://docs.akta.pro/getting-started/pricing
+      checked: '2026-08-07'
+      confidence: documented
+      note: 'Priced PER SECTION requested, all rates documented on the rate card: 2 credits each for firmographic, business_model, company_assessment, product_offering and technology; 1.5 for management_profile and strategic_signal; 1 for customer_profile and industry; 0.5 for trust_signal, company_hierarchy, digital_presence, financial_estimate and location; 3 for the Enterprise-only funding_detail and 5 for mna_and_investment. value is the UPPER BOUND — every standard (non-Enterprise) section at once = 17.5 credits; it sizes the hold and the displayed price, while the settle charges the actual `credits_consumed` the response reports (see api._observed_cost_micro), so a sections=location call costs the documented 0.5 credits, not 17.5. OBSERVED 2026-07-31: the test_request (sections=location) reported credits_consumed 0.50, exactly the rate card''s figure. Credits are $0.05 pay-as-you-go, $0.04 on subscription.'
     verified: 2026-07-31
     example_response: examples/akta.companies.enrich.json
     docs_url: https://docs.akta.pro/api-reference/company-data
@@ -87,7 +86,7 @@ endpoints:
       note: "the trailing slash on the path is required — without it Akta 307-redirects and the key is dropped. This is the registry's health probe as well as the name→UUID resolver for every other endpoint"
     test_request:
       queryParams: {query: "canva.com"}
-    cost: {type: free, value: 0, currency: USD, unit: call, note: 'documented free, and OBSERVED free 2026-07-28 and again 2026-07-31 — the response reports credits_consumed 0.00'}
+    cost: {type: free, value: 0, currency: USD, unit: call, confidence: verified, note: 'documented free, and OBSERVED free 2026-07-28 and again 2026-07-31 — the response reports credits_consumed 0.00'}
     verified: 2026-07-31
     example_response: examples/akta.companies.search.json
     docs_url: https://docs.akta.pro/api-reference/supporting-apis/company-search
@@ -123,15 +122,15 @@ endpoints:
       queryParams: {company: "canva.com", limit: 1}
     cost:
       type: per_call
-      value: 0.1
+      value: 0.2
       currency: credit
       per: 1
       unit: call
-      source: observed
+      source: docs
       source_url: https://docs.akta.pro/getting-started/pricing
-      checked: '2026-07-31'
-      confidence: inferred
-      note: '0.1 credit base fee per call PLUS 0.01 credit per article returned, so `limit` is the dial: the default 10 articles costs 0.2 credits, the max 1,000 costs 10.1. value here is the base per-call fee ONLY, which is why this stays `inferred` despite being observed — OBSERVED live 2026-07-31: a limit=1 call reported credits_consumed 0.11, i.e. the 0.1 base plus 0.01 for the single article, confirming the formula rather than the recorded number.'
+      checked: '2026-08-07'
+      confidence: documented
+      note: 'the rate card documents the formula exactly: 0.1 credit base fee per call PLUS 0.01 credit per article returned, so `limit` is the dial — limit=1 is 0.11 credits, the max 1,000 is 10.1. value here is the DEFAULT page (10 articles = 0.2 credits); it sizes the hold and the displayed price, while the settle charges the actual `credits_consumed` the response reports (see api._observed_cost_micro). OBSERVED live 2026-07-31: a limit=1 call reported credits_consumed 0.11, confirming the formula.'
     verified: 2026-07-31
     example_response: examples/akta.companies.news.json
     docs_url: https://docs.akta.pro/api-reference/news-signals
@@ -191,7 +190,7 @@ endpoints:
       note: "returns ranked industry codes with similarity scores — use it to build the `industry` filter that akta.companies.news accepts"
     test_request:
       queryParams: {query: "graphic design software"}
-    cost: {type: free, value: 0, currency: USD, unit: call, note: 'the endpoint page documents it as free (0 credits) and Akta''s rate card carries no line item for it either way; OBSERVED credits_consumed 0.00 on live calls 2026-07-28 and 2026-07-31, so free is measured here, not just documented'}
+    cost: {type: free, value: 0, currency: USD, unit: call, confidence: verified, note: 'the endpoint page documents it as free (0 credits) and Akta''s rate card carries no line item for it either way; OBSERVED credits_consumed 0.00 on live calls 2026-07-28 and 2026-07-31, so free is measured here, not just documented'}
     verified: 2026-07-31
     example_response: examples/akta.companies.industry.resolve.json
     docs_url: https://docs.akta.pro/api-reference/supporting-apis/industry-search

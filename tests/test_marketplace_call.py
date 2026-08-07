@@ -404,6 +404,11 @@ def test_observed_cost_only_trusts_a_real_number():
     assert A._observed_cost_micro("tikhub", b'{"cost": 0.5}') is None, "tikhub doesn't report a charge"
     assert A._observed_cost_micro("scrapecreators", b'{"credits_charged": 2}') == 2 * EP_CALL_MICRO
     assert A._observed_cost_micro("scrapecreators", b'{"success": true}') is None
+    # akta reports `credits_consumed` — the field that makes its per-section enrich billable at
+    # actuals rather than the catalog's upper-bound estimate. $0.05/credit (fx.yaml).
+    assert A._observed_cost_micro("akta", b'{"credits_consumed": 0.5}') == 25_000
+    assert A._observed_cost_micro("akta", b'{"credits_consumed": 0}') == 0, "a reported zero is honoured"
+    assert A._observed_cost_micro("akta", b'{"credits_charged": 2}') is None, "wrong field name means we never learned it"
 
 
 async def test_daily_cap_fails_closed(clients: AsyncClient, platform_on, monkeypatch):
