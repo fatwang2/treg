@@ -133,9 +133,9 @@ only for a non-onboarded session with **no team yet**. Step 0 names the team (`w
 marks onboarded via `/onboard/skip`); step 1 asks **which agent you're using** (picker with LobeHub icons,
 skippable); step 2 shows the per-agent **setup block** — the setup line and the team+token as ONE
 copyable unit (`welcomeSetupFull` copies the real token; `welcomeSetupMasked` renders it masked with a
-Show/Hide-key toggle, `startTokenShow`); step 3 is **"Try it out"** — the same `tryExamples` copy cards
-as the Getting-started page, footer "Go to Getting started" (`welcomeFinish`) + **"Browse all catalog →"**
-(`go('connections')`). Finishing (or skipping) lands on **`#start`** (Getting started) — also the default
+Show/Hide-key toggle, `startTokenShow`); step 3 is **"Try it out"** — a "waiting for your agent" status (pulsing `.wc-waitdot`, no 🎉), the
+same `tryExamples` copy cards AND the `tryOauth` connect chips as the Getting-started page, footer
+**"Skip"** (`welcomeFinish`) + **"Browse all catalog →"** (`go('connections')`). Finishing (or skipping) lands on **`#start`** (Getting started) — also the default
 view for ANY signed-in arrival at `/app` with no deep link or hash. `/onboard/seed-tool` and
 `/onboard/accept-teammate` no longer have a dashboard caller (the CLI/demo paths don't use them either);
 **"Remove demo"** (`resetDemo` → `/onboard/reset`) remains in Help. A clay **`demo` chip** marks a demo org.

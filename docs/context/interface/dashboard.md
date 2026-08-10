@@ -209,9 +209,9 @@ specific org — token bakes the org in; a session picks it via `X-Treg-Org`), a
   unpkg, theme-aware light/dark variants through `agentIcon`) with Skip/Next; the **setup block**
   (`step===2` — "In your agent's chat, send:", the setup line + team/token as one unit —
   `welcomeSetupFull` copies with the real token, `welcomeSetupMasked` displays it masked behind a
-  Show/Hide-key toggle) with Back/Next; and **"Try it out"** (`step===3`, wider modal — the same
-  `tryExamples` copy cards as Getting-started, footer "Go to Getting started" `welcomeFinish` +
-  **"Browse all catalog →"** `go('connections')`). Skip and Go-to-Getting-started call `welcomeFinish`
+  Show/Hide-key toggle) with Back/Next; and **"Try it out"** (`step===3`, wider modal — a "waiting for your agent" status line (pulsing
+  `.wc-waitdot`, no 🎉), the `tryExamples` copy cards and the `tryOauth` connect chips, footer **"Skip"**
+  `welcomeFinish` + **"Browse all catalog →"** `go('connections')`). Skip and Go-to-Getting-started call `welcomeFinish`
   → close + `go('start')` (Getting started, also the default landing for any signed-in arrival with no
   deep link/hash).
   **Exception —

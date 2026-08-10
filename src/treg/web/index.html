@@ -93,6 +93,10 @@
   .godot{width:6px;height:6px;border-radius:50%;background:var(--green);flex:0 0 6px;
     box-shadow:0 0 0 3px color-mix(in srgb,var(--green) 24%,transparent)}
   .chip.any{color:var(--muted)}
+  /* onboarding "waiting for your agent" status: a soft pulsing dot */
+  .wc-wait{display:inline-flex;align-items:center;gap:8px;font-family:var(--sans);font-size:13px;color:var(--muted)}
+  .wc-waitdot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none;animation:wcpulse 1.4s ease-in-out infinite}
+  @keyframes wcpulse{0%,100%{opacity:.35;box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 40%,transparent)}50%{opacity:1;box-shadow:0 0 0 5px color-mix(in srgb,var(--accent) 0%,transparent)}}
   /* Marketplace tab bar: All + one tab per catalog category + Platform (the provider shelves).
      Scrolls rather than wraps — ten tabs and a narrow window must not become two ragged rows.
      The rule under the tabs lives on the WRAPPER, not the scroller: the scroller carries a mask,
@@ -3051,16 +3055,24 @@ a:hover{text-decoration-color:var(--muted)}
             </div>
           </template>
           <template v-else>
-            <h2 style="margin:0 0 6px;font-size:19px">Try it out 🎉</h2>
-            <p class="sub" style="margin:0 0 16px">treg is ready with your agent. Copy any example and send it — or browse the full catalog.</p>
+            <h2 style="margin:0 0 6px;font-size:19px">Try it out</h2>
+            <div class="wc-wait" style="margin:0 0 16px"><span class="wc-waitdot"></span>Waiting for your agent — copy an example below and send it to get your first result.</div>
             <div class="try-grid">
               <button v-for="ex in tryExamples" :key="ex.k" type="button" class="try-card" @click="copyStart(ex.prompt,'wtry-'+ex.k)">
                 <span class="try-cat"><span style="display:inline-flex;align-items:center;gap:7px"><img class="try-ico" :src="'/logos/platforms/'+ex.logo+'.svg'" alt=""/><img v-if="ex.avatar" class="try-ico avatar" :src="ex.avatar" alt=""/>{{ex.cat}}</span><span class="try-copy" :class="{done:startCopied==='wtry-'+ex.k}">{{startCopied==='wtry-'+ex.k ? '✓ copied' : '⧉ copy'}}</span></span>
                 <span class="try-txt">{{ex.prompt}}</span>
               </button>
             </div>
+            <div class="oauth-div"><span>also connect OAuth to unlock new agent capabilities</span></div>
+            <div v-for="g in tryOauth" :key="g.label" style="margin-top:12px">
+              <div class="oauth-grp">{{g.label}}</div>
+              <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+                <button v-for="p in g.items" :key="p.s" type="button" class="prov-chip" @click="welcome.on=false; openProvider(p.s)"><img :src="'/logos/'+p.s+'.svg'" alt=""/>{{p.n}}</button>
+                <span v-if="g.soon.length" class="soon-note" :data-tip="g.soon.map(p=>p.n).join(', ')">{{g.soon.length}} coming soon</span>
+              </div>
+            </div>
             <div class="wc-foot">
-              <a href="#" class="sub" @click.prevent="welcomeFinish">Go to Getting started</a>
+              <a href="#" class="sub" @click.prevent="welcomeFinish">Skip</a>
               <button class="btn primary" @click="welcome.on=false; go('connections')">Browse all catalog →</button>
             </div>
           </template>
