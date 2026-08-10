@@ -3008,7 +3008,7 @@ a:hover{text-decoration-color:var(--muted)}
 
     <!-- FIRST-RUN WELCOME: name your team → pick your agent → the setup line (the primary onboarding path) -->
     <div class="scrim" role="dialog" aria-modal="true" v-if="welcome.on">
-      <div class="modal" :style="{width: welcome.step===0?'min(470px,94vw)':'min(560px,94vw)'}">
+      <div class="modal" :style="{width: welcome.step===0?'min(470px,94vw)':(welcome.step===3?'min(680px,94vw)':'min(560px,94vw)')}">
         <div style="padding:26px 26px 22px">
           <template v-if="welcome.step===0">
             <div style="color:var(--accent);font-size:15px;letter-spacing:.5px;margin-bottom:12px">▚ treg</div>
@@ -3039,14 +3039,29 @@ a:hover{text-decoration-color:var(--muted)}
               <button class="btn primary" @click="welcome.step=2">Next →</button>
             </div>
           </template>
-          <template v-else>
+          <template v-else-if="welcome.step===2">
             <p class="sub" style="display:flex;align-items:center;gap:8px;margin:0 0 16px"><img v-if="welcomeAgent.icon" :src="agentIcon(welcomeAgent.icon)" alt="" style="width:18px;height:18px" onerror="this.style.visibility='hidden'"/>Setting up treg for <b style="color:var(--ink)">{{welcomeAgent.name}}</b></p>
             <h2 style="margin:0 0 14px;font-size:19px">In your agent's chat, send:</h2>
-            <div class="lc-codewrap"><button class="lc-cp" @click="copyStart(welcomeSetupCmd,'wc')">{{startCopied==='wc'?'✓ copied':'copy'}}</button><pre>{{welcomeSetupCmd}}</pre></div>
-            <p class="sub" style="font-size:12px;margin:12px 0 0">Your agent reads that file and sets everything up — installs the CLI, signs in, and starts calling tools. The full guide is always on <b>Getting started</b>.</p>
+            <div class="lc-codewrap"><button class="lc-cp" @click="copyStart(welcomeSetupFull,'wc')">{{startCopied==='wc'?'✓ copied':'copy'}}</button><pre style="white-space:pre-wrap;word-break:break-all">{{welcomeSetupMasked}}</pre></div>
+            <a v-if="myToken" href="#" class="sub" style="font-size:12px;display:inline-block;margin-top:6px" @click.prevent="startTokenShow=!startTokenShow">{{startTokenShow?'Hide':'Show'}} key</a>
+            <p class="sub" style="font-size:12px;margin:12px 0 0">Your agent reads that file and signs in with your team &amp; token — it installs the CLI and starts calling tools.</p>
             <div class="wc-foot">
               <a href="#" class="sub" @click.prevent="welcome.step=1">← Back</a>
-              <button class="btn primary" @click="welcomeFinish">Done ✓</button>
+              <button class="btn primary" @click="welcome.step=3">Next →</button>
+            </div>
+          </template>
+          <template v-else>
+            <h2 style="margin:0 0 6px;font-size:19px">Try it out 🎉</h2>
+            <p class="sub" style="margin:0 0 16px">treg is ready with your agent. Copy any example and send it — or browse the full catalog.</p>
+            <div class="try-grid">
+              <button v-for="ex in tryExamples" :key="ex.k" type="button" class="try-card" @click="copyStart(ex.prompt,'wtry-'+ex.k)">
+                <span class="try-cat"><span style="display:inline-flex;align-items:center;gap:7px"><img class="try-ico" :src="'/logos/platforms/'+ex.logo+'.svg'" alt=""/><img v-if="ex.avatar" class="try-ico avatar" :src="ex.avatar" alt=""/>{{ex.cat}}</span><span class="try-copy" :class="{done:startCopied==='wtry-'+ex.k}">{{startCopied==='wtry-'+ex.k ? '✓ copied' : '⧉ copy'}}</span></span>
+                <span class="try-txt">{{ex.prompt}}</span>
+              </button>
+            </div>
+            <div class="wc-foot">
+              <a href="#" class="sub" @click.prevent="welcomeFinish">Go to Getting started</a>
+              <button class="btn primary" @click="welcome.on=false; go('connections')">Browse all catalog →</button>
             </div>
           </template>
           <div v-if="welcome.err" class="banner" style="margin-top:12px">{{welcome.err}}</div>
@@ -3718,6 +3733,10 @@ createApp({
     welcomeAgent(){ return this.welcomeAgents.concat(this.welcomeMoreAgents).find(a=>a.id===this.welcome.agent) || this.welcomeAgents[0]; },
     welcomeIsMore(){ return this.welcomeMoreAgents.some(a=>a.id===this.welcome.agent); },
     welcomeSetupCmd(){ return this.buildAgentPrompt('agent', true); },
+    // onboarding modal: the setup line + team/token as ONE copyable block (token masked until shown)
+    welcomeSetupFull(){ return this.welcomeSetupCmd+'\n\nwith team '+(this.activeSlugNow||'<team-slug>')+' token: '+(this.myToken||'<YOUR_TOKEN>'); },
+    welcomeSetupMasked(){ const t=this.myToken?(this.startTokenShow?this.myToken:(this.myToken.slice(0,14)+'••••••••••••••••')):'<YOUR_TOKEN>';
+      return this.welcomeSetupCmd+'\n\nwith team '+(this.activeSlugNow||'<team-slug>')+' token: '+t; },
     // Try-it drawer: the filled query string + the three "how to run it" recipes (agent / CLI / API)
     epTryQuery(){ return (this.epTryParams||[]).filter(p=>p.value!=='' && p.value!=null)
       .map(p=>encodeURIComponent(p.name)+'='+encodeURIComponent(p.value)).join('&'); },

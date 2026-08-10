@@ -203,11 +203,17 @@ specific org — token bakes the org in; a session picks it via `X-Treg-Org`), a
 - **First-run onboarding** — a brand-new user has **zero teams** (no auto personal org), so `maybeOnboard`
   shows a **mandatory "name your team" welcome** (`welcome.*`; team name pre-suggested from the email
   domain via `_suggestTeamName`). Step 0 is NOT dismissable — no skip, survives Escape/backdrop — the only
-  action is `welcomeCreate` (`POST /orgs`, marks onboarded). Two more steps follow **inside the same
+  action is `welcomeCreate` (`POST /orgs`, marks onboarded). Three more steps follow **inside the same
   modal**: an **agent picker** (`welcome.step===1` — OpenClaw / Hermes Agent / Claude.ai / Claude Code /
   Codex, plus a "More" expander with opencode / pi / Cursor / Gemini CLI / Other; LobeHub icons via
-  unpkg, theme-aware light/dark variants through `agentIcon`) with Skip/Next, then the **setup line**
-  (`step===2` — "In your agent's chat, send:" + `welcomeSetupCmd`, copy button) with Back/Done. Skip and Done both call `welcomeFinish` → close + `go('start')` (Getting started, also the default landing for any signed-in arrival with no deep link/hash).
+  unpkg, theme-aware light/dark variants through `agentIcon`) with Skip/Next; the **setup block**
+  (`step===2` — "In your agent's chat, send:", the setup line + team/token as one unit —
+  `welcomeSetupFull` copies with the real token, `welcomeSetupMasked` displays it masked behind a
+  Show/Hide-key toggle) with Back/Next; and **"Try it out"** (`step===3`, wider modal — the same
+  `tryExamples` copy cards as Getting-started, footer "Go to Getting started" `welcomeFinish` +
+  **"Browse all catalog →"** `go('connections')`). Skip and Go-to-Getting-started call `welcomeFinish`
+  → close + `go('start')` (Getting started, also the default landing for any signed-in arrival with no
+  deep link/hash).
   **Exception —
   an invited user**: `maybeOnboard` checks `pendingInvites` first and, if any, shows a **multi-select
   accept-invite modal** (`inviteChoice` / `openInviteChoice` seeds `inviteSel` with ALL invites checked;

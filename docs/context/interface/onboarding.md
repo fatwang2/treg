@@ -128,11 +128,14 @@ After a first **human** `treg login`, `_maybe_offer_onboarding` prompts `[Y/n]` 
 
 The old docked "Getting started" stepper (`onb.*` state, `.onb-panel`/`.onb-push`/`.onb-shift`) is
 **removed** — its content had drifted from the product and it kept re-appearing after signup. First-run
-now is a **three-step welcome modal**: boot reads `onboarded` from `/auth/me`; `maybeOnboard()` opens it
+now is a **four-step welcome modal**: boot reads `onboarded` from `/auth/me`; `maybeOnboard()` opens it
 only for a non-onboarded session with **no team yet**. Step 0 names the team (`welcomeCreate` → `POST /orgs`,
 marks onboarded via `/onboard/skip`); step 1 asks **which agent you're using** (picker with LobeHub icons,
-skippable); step 2 shows the per-agent **setup line** (`set up treg — <proxy>/llms.txt with token <T>, team <slug>` — the ONE agent instruction everywhere). Finishing (or
-skipping) lands on **`#start`** (Getting started) — also the default view for ANY signed-in arrival at
-`/app` with no deep link or hash. `/onboard/seed-tool` and
+skippable); step 2 shows the per-agent **setup block** — the setup line and the team+token as ONE
+copyable unit (`welcomeSetupFull` copies the real token; `welcomeSetupMasked` renders it masked with a
+Show/Hide-key toggle, `startTokenShow`); step 3 is **"Try it out"** — the same `tryExamples` copy cards
+as the Getting-started page, footer "Go to Getting started" (`welcomeFinish`) + **"Browse all catalog →"**
+(`go('connections')`). Finishing (or skipping) lands on **`#start`** (Getting started) — also the default
+view for ANY signed-in arrival at `/app` with no deep link or hash. `/onboard/seed-tool` and
 `/onboard/accept-teammate` no longer have a dashboard caller (the CLI/demo paths don't use them either);
 **"Remove demo"** (`resetDemo` → `/onboard/reset`) remains in Help. A clay **`demo` chip** marks a demo org.
