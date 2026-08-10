@@ -397,6 +397,22 @@ p.sub b{color:var(--ink);font-weight:600}
 #lwf{opacity:0;transition:opacity .45s var(--ease-out)}
 #lwf.in{opacity:1}
 
+/* 04 — 0% additional fee: display title + mono equation card */
+.zeroband{padding:56px 0 72px;text-align:center}
+.zeroband h3{font-family:var(--display);font-weight:400;font-size:clamp(26px,3.2vw,40px);
+  line-height:1.15;margin:0}
+.zeroband h3 i{font-style:normal;color:var(--teal)}
+.zeq{max-width:520px;margin:28px auto 0;background:var(--inverse);border-radius:var(--rb);
+  box-shadow:var(--shadow-lg);padding:15px 17px;display:flex;align-items:center;gap:10px;text-align:left}
+.zeq .ps{color:#7fdcae;font-family:var(--mono);font-size:13px;flex:none}
+.zeq code{font-family:var(--mono);font-size:13px;color:var(--inverse-ink);
+  white-space:nowrap;overflow-x:auto;scrollbar-width:none;min-height:1.3em}
+.zeq code::-webkit-scrollbar{display:none}
+.zeq code b{color:#7fdcae;font-weight:700}
+.zcaret{width:7px;height:14px;background:#7fdcae;flex:none;animation:blink 1s steps(1) infinite}
+.zsub{margin-top:16px;font-family:var(--mono);font-size:11.5px;color:var(--muted2)}
+.zsub::before{content:"› ";color:var(--teal)}
+
 /* ================================================================
    CLOSE
    ================================================================ */
@@ -456,6 +472,10 @@ footer{margin-top:150px;border-top:1px solid var(--line);position:relative;overf
   .pgrid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .ben{grid-template-columns:1fr;gap:26px;padding:56px 0}
   .ben.flip .bentext{order:0}
+  .zeroband{padding:36px 0 56px}
+  .zeq{margin-left:8px;margin-right:8px;padding:13px 14px}
+  .zeq code,.zeq .ps{font-size:11px}
+  .zeq code{white-space:normal;overflow:visible}
   .hero{padding:126px 0 0}
   .roles{margin-top:64px}
 }
@@ -711,6 +731,13 @@ footer{margin-top:150px;border-top:1px solid var(--line);position:relative;overf
         </div>
         <div class="wf" id="lwf">✓ $371/mo of seats → cents per call</div>
       </div>
+    </div>
+
+    <!-- 04 — 0% additional fee -->
+    <div class="zeroband rv" id="zeroband">
+      <h3>0% <i>additional fee.</i></h3>
+      <div class="zeq"><span class="ps">$</span><code id="zeqtxt"></code><span class="zcaret"></span></div>
+      <div class="zsub">we earn on volume pricing with vendors — not on you</div>
     </div>
 
     <!-- BYOK shelf scene — parked 2026-08-05; BYOK now a line in 03. Re-enable by uncommenting. -->
@@ -1064,6 +1091,33 @@ function stopRotation(){ userTouched=true; clearInterval(roleTimer); }
     if(visible&&!playing) play();
     if(!visible){timers.forEach(clearTimeout);timers=[];playing=false;}
   }),{threshold:.35}).observe(led);
+})();
+
+/* ================================================================
+   the 0% band — the equation types itself out once when it
+   scrolls in; the markup term stays highlighted.
+   ================================================================ */
+(function(){
+  const band=document.getElementById('zeroband'), el=document.getElementById('zeqtxt');
+  if(!band||!el) return;
+  const segs=[{t:'provider rate '},{t:'+ $0.000 markup',b:1},{t:' = your price'}];
+  const total=segs.reduce((n,s)=>n+s.t.length,0);
+  function render(n){
+    let h='',c=0;
+    for(const s of segs){
+      const chunk=s.t.slice(0,Math.max(0,Math.min(s.t.length,n-c)));
+      h+=s.b?'<b>'+chunk+'</b>':chunk; c+=s.t.length;
+    }
+    el.innerHTML=h;
+  }
+  if(REDUCED){ render(total); return; }
+  const io=new IntersectionObserver(es=>es.forEach(e=>{
+    if(!e.isIntersecting) return;
+    io.disconnect();
+    let n=0;
+    const tick=setInterval(()=>{ render(++n); if(n>=total) clearInterval(tick); },38);
+  }),{threshold:.5});
+  io.observe(band);
 })();
 
 /* clicking the hero role jumps into the catalog */
