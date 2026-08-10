@@ -519,13 +519,23 @@ Both panes are the **same bounded box**: `.prm` and `.cat-ex pre` cap at **320px
 themselves. A DataForSEO body carries thirty parameters, and uncapped a single expansion pushed every
 row below it off the screen.
 
-The tab bar's right side carries the two things you should never have to scroll for: the provider's
-**docs** (falling back to its pricing page) and **Connect**, which wears the ink fill (`.btn.primary`
-over `--inverse`) — the strongest treatment the design language has, since connecting the provider is
-the one action that unblocks every row on the page and it used to be a ghost button under a parameter
-table. Once connected the button is replaced in place by the green **`Connected`** chip. Everything
-here renders identically in a single row's expansion and in a merged row's provider sub-row, because
-both paths share the one `.lep` block.
+The tab bar's right side carries the provider's **docs** (falling back to its pricing page), then the
+two run actions. **▶ Try it** (`openEpTry`) is the **primary** ink-fill CTA — trying the endpoint (with
+no key, on treg's balance) is the thing most visitors want, so it wears the strongest treatment; **Bring
+your own key** (`openProvider`, formerly the ink-filled "Connect {provider}") is now the **secondary**
+ghost button beside it, for the minority who already pay for that provider and want their own key to win.
+Once an account is connected the secondary button is replaced in place by the green **`Connected`** chip.
+Everything here renders identically in a single row's expansion and in a merged row's provider sub-row,
+because both paths share the one `.lep` block.
+
+**The Try-it drawer (`epTry`) is four tabs** (`epTryTab`, default **AI Agent**): **AI Agent** — the
+one-line setup (`epTrySetupLine`, with team + token embedded **here only**, a copy-and-run-now context;
+the setup line everywhere else stays clean) plus a ready "Use treg to call `<id>` — `<summary>`" prompt
+(`epTryAgentUse`); **CLI** — install/login, `treg catalog get <id>`, and the filled `treg call <id>
+--query …` (`epTryCliCall`); **API** — the `curl {BASE}/call/<id>?<query>` passthrough with the token
+header (`epTryCurl`, adding `X-Treg-Org` in session mode since the minted token is an identity token);
+and **Manual** — the live test form (params + `❯ Run`, disabled with a reason when the access dry-run
+says this org can't call it) that the drawer used to be by itself.
 
 **Example responses** load when their tab is FIRST opened (`setEpTab` → `loadExample`, guarded by
 `if(this.platEx[e.id]) return`), never with the page and never twice — a platform can carry hundreds of
