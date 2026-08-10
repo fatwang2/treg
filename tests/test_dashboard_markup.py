@@ -792,15 +792,22 @@ def test_both_panes_are_capped_and_scroll_rather_than_growing_the_page():
     assert ".cat-ex pre{max-height:320px}" in INDEX
 
 
-def test_connect_is_the_loudest_thing_in_the_expansion():
-    """Connecting the provider is the one action that unblocks every row on the page, and it used to
-    be a ghost button below a parameter table. It sits in the tab bar — visible the moment the
-    expansion opens — wearing the ink fill, with the green Connected state in its place once done."""
+def test_the_run_actions_lead_the_expansion_tab_bar():
+    """The tab bar carries docs + the two run actions, visible the moment the expansion opens.
+    Try-it is the primary (ink-fill) CTA for a key/token provider — trying on treg's key is what most
+    visitors want — with the own-key path demoted to a secondary "Bring your own key". For an OAuth
+    provider treg can't serve on its own key, so Connect is the primary instead and Try-it is
+    secondary. The green Connected state replaces the connect button once an account exists."""
     block = _ledger()
-    bar = block[block.index('<span class="ltabs-r">') :][:1200]
-    assert 'class="btn sm primary"' in bar and "openProvider(e.provider)" in bar
-    assert 'v-if="catConnected(e.provider)" class="chip go"' in bar
-    assert ">Connected</span>" in bar
+    bar = block[block.index('<span class="ltabs-r">') :][:2400]
+    # Try-it: primary UNLESS the provider is OAuth
+    assert 'openEpTry(e)' in bar and ':class="{primary:!mkOauth(e.provider)}"' in bar
+    # OAuth → Connect is the ink-fill primary
+    assert 'v-else-if="mkOauth(e.provider)" class="btn sm primary"' in bar and "openProvider(e.provider)" in bar
+    assert ">Connect {{e.provider_display||e.provider}}</button>" in bar
+    # key/token → own key is the secondary
+    assert 'v-else-if="mkKnown(e.provider)" class="btn sm"' in bar and ">Bring your own key</button>" in bar
+    assert 'v-if="catConnected(e.provider)" class="chip go"' in bar and ">Connected</span>" in bar
     assert 'v-if="e.docs_url"' in bar  # ...docs sit up here too, not below the fold
     assert ".ltabs-r .btn.primary{background:var(--inverse)" in INDEX
 

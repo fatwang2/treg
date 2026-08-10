@@ -1738,9 +1738,14 @@ a:hover{text-decoration-color:var(--muted)}
                             <a v-else-if="provFact(e.provider,'pricing_url')" class="btn sm" :href="provFact(e.provider,'pricing_url')" target="_blank" rel="noopener" @click.stop>Pricing ↗</a>
                             <!-- Always offered: the drawer's access dry-run says how (or whether) THIS
                                  org can call it, and disables Run with the reason when it can't. -->
-                            <button class="btn sm primary" @click.stop="openEpTry(e)"
+                            <!-- OAuth providers can't be served on treg's key (they act AS your account),
+                                 so Connect is their primary CTA and Try-it is secondary. Key/token
+                                 providers are the reverse: Try-it (treg's key) leads, own key is optional. -->
+                            <button class="btn sm" :class="{primary:!mkOauth(e.provider)}" @click.stop="openEpTry(e)"
                                     title="Call it now, or copy the agent / CLI / API way to run it">▶ Try it</button>
                             <span v-if="catConnected(e.provider)" class="chip go" title="You already have a connected account that can call this"><span class="godot"></span>Connected</span>
+                            <button v-else-if="mkOauth(e.provider)" class="btn sm primary" @click.stop="openProvider(e.provider)"
+                                    :title="'Connect '+(e.provider_display||e.provider)+' — one-click OAuth, calls act as your account'">Connect {{e.provider_display||e.provider}}</button>
                             <button v-else-if="mkKnown(e.provider)" class="btn sm" @click.stop="openProvider(e.provider)"
                                     :title="'Register your own '+(e.provider_display||e.provider)+' key — your key wins over treg\'s and those calls are never metered'">Bring your own key</button>
                           </span>
@@ -3228,17 +3233,26 @@ treg login</pre></div>
             <p class="sub" v-if="!myToken" style="margin:8px 0 0;font-size:12px"><span class="mono">$TREG_TOKEN</span> is a placeholder — set it to your API token (copy it on Getting started).</p>
           </template>
 
-          <!-- MANUAL — the live test form (unchanged) -->
+          <!-- MANUAL — the live test form -->
           <template v-else>
-            <div class="field" v-for="p in epTryParams" :key="p.name" style="max-width:520px">
-              <label class="mono" style="min-width:140px">{{p.name}}<span v-if="p.required" style="color:var(--accent)"> *</span></label>
-              <input v-model="p.value" :placeholder="p.required?'required':'optional'"/>
+            <!-- Not callable from here (no key connected / no treg price): don't strand the user on a
+                 dead Run button — point them at the tab that DOES work. -->
+            <div v-if="epTryAccess && epTryAccess.tier!=='platform' && epTryAccess.tier!=='tool' && epTryAccess.tier!=='credential'"
+                 class="banner" style="margin:0">
+              Can't run this here yet — {{mkOauth(epTry.provider) ? 'connect '+(epTry.provider_display||epTry.provider)+' first (Bring your own key), then Run.' : 'this endpoint needs a key. Use the AI Agent / CLI / API tab, or Bring your own key.'}}
             </div>
-            <div v-if="(epTry.method||'GET')!=='GET' && epTryBody!==''" class="field" style="max-width:520px;align-items:flex-start">
-              <label style="min-width:140px">Body (JSON)</label>
-              <textarea v-model="epTryBody" rows="6" style="width:100%;font-family:var(--mono);font-size:12px"></textarea>
-            </div>
-            <button class="btn primary" :disabled="epTryBusy || (epTryAccess && epTryAccess.tier!=='platform' && epTryAccess.tier!=='tool' && epTryAccess.tier!=='credential')" @click="runEpTry">{{epTryBusy?'Running…':'❯ Run'}}</button>
+            <template v-else>
+              <div class="field" v-for="p in epTryParams" :key="p.name" style="max-width:520px">
+                <label class="mono" style="min-width:140px">{{p.name}}<span v-if="p.required" style="color:var(--accent)"> *</span></label>
+                <input v-model="p.value" :placeholder="p.required?'required':'optional'"/>
+              </div>
+              <p v-if="!epTryParams.length && (epTry.method||'GET')==='GET'" class="sub" style="margin:0 0 12px">No parameters — just run it.</p>
+              <div v-if="(epTry.method||'GET')!=='GET' && epTryBody!==''" class="field" style="max-width:520px;align-items:flex-start">
+                <label style="min-width:140px">Body (JSON)</label>
+                <textarea v-model="epTryBody" rows="6" style="width:100%;font-family:var(--mono);font-size:12px"></textarea>
+              </div>
+              <button class="btn primary" :disabled="epTryBusy" @click="runEpTry">{{epTryBusy?'Running…':'❯ Run'}}</button>
+            </template>
             <div v-if="epTryResp" style="margin-top:14px">
               <div class="muted" style="font-size:12px;margin-bottom:6px">Result
                 <span class="badge" :class="epTryStatus>=200&&epTryStatus<300?'ok':'invalid'">{{epTryStatus}}</span>
@@ -4917,6 +4931,7 @@ createApp({
       if(c.value==null) return 'credit-priced';
       return this.costLabel(c); },
     mkKnown(service){ return this.providers.some(p=>p.service===service); },
+    mkOauth(service){ const p=this.providers.find(x=>x.service===service); return !!p && p.auth_kind==='oauth'; },
     provName(service){ const p=this.providers.find(x=>x.service===service); return p?p.display_name:service; },
     // Provider-wide facts, served once per provider on the platform response rather than copied
     // onto every row.

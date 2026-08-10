@@ -520,13 +520,14 @@ themselves. A DataForSEO body carries thirty parameters, and uncapped a single e
 row below it off the screen.
 
 The tab bar's right side carries the provider's **docs** (falling back to its pricing page), then the
-two run actions. **▶ Try it** (`openEpTry`) is the **primary** ink-fill CTA — trying the endpoint (with
-no key, on treg's balance) is the thing most visitors want, so it wears the strongest treatment; **Bring
-your own key** (`openProvider`, formerly the ink-filled "Connect {provider}") is now the **secondary**
-ghost button beside it, for the minority who already pay for that provider and want their own key to win.
-Once an account is connected the secondary button is replaced in place by the green **`Connected`** chip.
-Everything here renders identically in a single row's expansion and in a merged row's provider sub-row,
-because both paths share the one `.lep` block.
+two run actions — and which one is primary depends on the provider's `auth_kind` (`mkOauth(service)`).
+For a **key/token** provider, **▶ Try it** (`openEpTry`) is the ink-fill **primary** — trying on treg's
+own key is what most visitors want — and **Bring your own key** (`openProvider`, formerly the ink-filled
+"Connect {provider}") is the secondary ghost beside it. For an **OAuth** provider treg *can't* serve on
+its own key (calls act as your account), so the order flips: **Connect {provider}** is the ink-fill
+primary and Try-it is secondary. Once an account is connected the connect/own-key button is replaced in
+place by the green **`Connected`** chip. Everything here renders identically in a single row's expansion
+and in a merged row's provider sub-row, because both paths share the one `.lep` block.
 
 **The Try-it drawer (`epTry`) is four tabs** (`epTryTab`, default **AI Agent**): **AI Agent** — the
 one-line setup (`epTrySetupLine`, with team + token embedded **here only**, a copy-and-run-now context;
