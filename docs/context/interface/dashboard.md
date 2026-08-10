@@ -174,12 +174,24 @@ specific org — token bakes the org in; a session picks it via `X-Treg-Org`), a
   confirmation spelling out that an admin agent can register/delete tools and secrets and manage members.
 - **Tool form** — Add/Edit now carries a **Project** dropdown (default "team-wide"); `loadProjectsIfNeeded`
   fetches the list on demand so it works even if the Team page was never opened.
-- **Getting started** (`view==='start'`, under Help) — two tabs (`startTab`, default `access`), each
-  leading with the agent instruction (`buildAgentPrompt('agent')`) then a manual CLI walkthrough:
-  **"Access 2000+ treg tools"** (install `{BASE}/install.sh` → `treg login` → catalog search/call/
-  `treg balance`) and **"Setup your team's skills & env vault"**, which stacks two sections — set up
-  the vault (install → login → `treg scan`/`treg upload`) then *let the team use it* (`treg skill ls`
-  / `skill install` / URL-passthrough call). Per-block copy via `copyStart`.
+- **Getting started** (`view==='start'`, the FIRST nav item, above Catalog; the sidebar's team half is
+  labeled **"Your vault"** — Jason's explicit naming call, overriding the no-"vault" vocabulary rule) —
+  two numbered **step cards** (`.start-card`):
+  **① Set up your \<agent\>** — an agent dropdown (`startAgentOpen`, shares `welcome.agent` +
+  `welcomeAgents`/`welcomeMoreAgents` with the first-run modal; "Docs" links `/tutorial`) above the
+  per-agent setup line (`welcomeSetupCmd` — `set up treg — <proxy>/llms.txt`) and, combined into the
+  same card, **Your API key** (`myToken`, masked with a `startTokenShow` reveal + copy — the key
+  already exists, so there is no "create key" step). **② Try it out** — four copyable example
+  prompts (`tryExamples`, category-labeled `.try-card`s: Social/Trends/SEO/Enrichment — concrete
+  live-data asks a bare agent can't answer), then an `.oauth-div` divider ("also connect OAuth
+  accounts for new agent capabilities") over three grouped rows of `.prov-chip` logo chips
+  (`tryOauth` — Post on social: X/YouTube/TikTok/LinkedIn with a dotted "`N` coming soon"
+  `.soon-note` whose `title` tooltip lists Instagram/Facebook Pages · Manage ad campaigns:
+  Google/Meta Ads · SEO on your own site: GA/GSC/GBP) — each chip `openProvider(service)` into the
+  marketplace connect page.
+  Below, a collapsed `<details>` ("Prefer the terminal?") keeps the old two-tab manual walkthrough
+  (`startTab`: **Access** install → login → catalog search/call/balance; **Setup** scan/upload then
+  the team-use commands). Per-block copy via `copyStart`.
 - **Activity** — one time-sorted feed (`activityRows`) merging `GET /calls` (proxy calls) + `GET /runs`
   (CLI executions). Local runs now arrive via `/runs` (tagged `where`), so the calls feed **excludes**
   `local_run` rows to avoid double-counting, and each run row shows a **local/server** chip.
@@ -190,8 +202,14 @@ specific org — token bakes the org in; a session picks it via `X-Treg-Org`), a
   (`u.email===me`) to prevent lockout.
 - **First-run onboarding** — a brand-new user has **zero teams** (no auto personal org), so `maybeOnboard`
   shows a **mandatory "name your team" welcome** (`welcome.*`; team name pre-suggested from the email
-  domain via `_suggestTeamName`). It is NOT dismissable — no skip, survives Escape/backdrop — the only
-  action is `welcomeCreate` (`POST /orgs`, marks onboarded, lands on Secrets with a hint). **Exception —
+  domain via `_suggestTeamName`). Step 0 is NOT dismissable — no skip, survives Escape/backdrop — the only
+  action is `welcomeCreate` (`POST /orgs`, marks onboarded). Two more steps follow **inside the same
+  modal**: an **agent picker** (`welcome.step===1` — OpenClaw / Hermes Agent / Claude.ai / Claude Code /
+  Codex, plus a "More" expander with opencode / pi / Cursor / Gemini CLI / Other; LobeHub icons via
+  unpkg, theme-aware light/dark variants through `agentIcon`) with Skip/Next, then the **setup line**
+  (`step===2` — "In your agent's chat, send: `set up treg — <proxy>/llms.txt`", `welcomeSetupCmd`, copy
+  button) with Back/Done. Skip and Done both call `welcomeFinish` → close + `go('connections')`.
+  **Exception —
   an invited user**: `maybeOnboard` checks `pendingInvites` first and, if any, shows a **multi-select
   accept-invite modal** (`inviteChoice` / `openInviteChoice` seeds `inviteSel` with ALL invites checked;
   `sortedInvites` puts the clicked link's team — `inviteLinkOrg` — first) — "Accept & join N teams →" →
@@ -212,12 +230,11 @@ specific org — token bakes the org in; a session picks it via `X-Treg-Org`), a
   real door and the invite auto-appears via `/invites/mine` (newest-first). Invalid/expired →
   `/?invite_expired=1`. Neither path consumes the invite (still `pending`); the accept modal does. `loadAll`
   short-circuits the org-scoped fetches while `myOrgs` is empty so no error banner flashes behind it. The
-  old demo/guided stepper (`onb.*`) is now opt-in, replayable from Help. A `demo` chip marks a sandbox org.
+  old demo/guided stepper (`onb.*`) is removed entirely. A `demo` chip marks a sandbox org.
 - **Help → Tutorial** — the full interactive walkthrough, rendered natively (Vue) from the shared
   `window.TREG_TUTORIAL` data (`tutGo`/`tutHL`/`tutCopy`, syntax-highlighted command + output blocks,
   persona chips, and four toggle panels — **Concepts · Roles · Auth shapes · Skills**). The standalone
-  `/tutorial` mirrors it and opens a panel from the URL hash (`/tutorial#auth`, `#skills`); the onboarding
-  stepper deep-links each step's "Read more" there via `readMore(onbSection)`. See below.
+  `/tutorial` mirrors it and opens a panel from the URL hash (`/tutorial#auth`, `#skills`). See below.
 
 ## Marketplace — the in-browser OAuth-connect UI (`view==='connections'` / `'provider'`)
 The dashboard now runs the whole **hosted connect flow** in the browser, so a member can attach a

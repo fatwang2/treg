@@ -79,11 +79,11 @@ you admin → **Share your own**, else **the catalog**) applies **only non-inter
   example if none → ④ `_demo_call_log` — an illustrative ledger: the call you just made plus example
   teammates on YOUR email domain (so they read as real). The `echo` tool and the old seed-a-team flow are gone.
 
-`provision` (full auto-seed) backs the Demo path. The dashboard first-run stepper still uses the narrower
-helpers so the team is the user's own REAL org (not `demo`): `seed_tool(db, org, owner_email)` adds the
-`echo` tool+secret (idempotent) for the no-key call; `accept_demo_invite(db, org_id, invite)` creates the
-fake teammate (`demo=True`) and accepts a pending invite. `GUIDED_TEAMMATE` = Alex Rivera
-(`alex@demo.treg.local`, member).
+`provision` (full auto-seed) backs the Demo path. The narrower helpers — `seed_tool(db, org, owner_email)`
+(adds the `echo` tool+secret, idempotent) and `accept_demo_invite(db, org_id, invite)` (creates the fake
+teammate `demo=True` and accepts a pending invite; `GUIDED_TEAMMATE` = Alex Rivera, `alex@demo.treg.local`,
+member) — were the dashboard stepper's backing; with the stepper removed they have no UI caller, though
+their endpoints remain.
 
 Idempotent — `existing_demo_org` reuses the caller's demo org instead of stacking. Marks
 `owner.onboarded=True`. `reset(db, owner)` deletes every demo org the caller owns (same cascade as
@@ -126,18 +126,13 @@ After a first **human** `treg login`, `_maybe_offer_onboarding` prompts `[Y/n]` 
 
 ## Dashboard face (`web/index.html`)
 
-A **docked right-side narrative stepper** (`onb.*` state; content pushed left via `.onb-push` so nothing
-overlaps). Boot reads `onboarded` from `/auth/me`; `maybeOnboard()` auto-opens it only for a non-onboarded
-session with **no team yet**. The team itself is created up front by the separate **welcome** flow
-(`welcomeCreate` → `POST /orgs`), which then lands the user on "Getting started" and launches the stepper
-alongside it. **Five steps** (`onbSteps` = Why treg · Set up your vault · Add a teammate · Call without
-keys · You're set) tell the story and have the USER do each action, with `onbGoto`/`onbNext`/`onbBack`
-walking the panel to the matching page (`orgs` for the roster, `tools` for vault + calling): **Add a
-teammate** (`onbInviteTeammate` prefills + invites Alex, then `/onboard/accept-teammate` auto-joins) →
-**Call without keys** (`onbAddTool` → `/onboard/seed-tool`, then `onbTryEcho` opens the Try-it drawer,
-shifted left via `.drawer.onb-shift` so it doesn't overlap the panel). A step tracker shows
-numbered/checked progress; **↺ Restart** (`onbRestart`) and `onbFinish`/**✕** skip (posting
-`/onboard/skip`). Each step's **"Read more"** deep-links to the matching tutorial panel via
-`readMore(onbSection)` → `/tutorial#<concepts|skills|roles|auth>`. The stepper fires only on first run —
-the Help chooser's "Guided setup" replay card (and its `replayOnboard` method) was removed; **"Remove
-demo"** (`resetDemo`) remains in Help. A clay **`demo` chip** marks a demo org.
+The old docked "Getting started" stepper (`onb.*` state, `.onb-panel`/`.onb-push`/`.onb-shift`) is
+**removed** — its content had drifted from the product and it kept re-appearing after signup. First-run
+now is a **three-step welcome modal**: boot reads `onboarded` from `/auth/me`; `maybeOnboard()` opens it
+only for a non-onboarded session with **no team yet**. Step 0 names the team (`welcomeCreate` → `POST /orgs`,
+marks onboarded via `/onboard/skip`); step 1 asks **which agent you're using** (picker with LobeHub icons,
+skippable); step 2 shows the per-agent **setup line** (`set up treg — <proxy>/llms.txt`). Finishing (or
+skipping) lands on **`#connections`** — also the default view for ANY signed-in arrival at `/app` with no
+deep link or hash. `/onboard/seed-tool` and
+`/onboard/accept-teammate` no longer have a dashboard caller (the CLI/demo paths don't use them either);
+**"Remove demo"** (`resetDemo` → `/onboard/reset`) remains in Help. A clay **`demo` chip** marks a demo org.

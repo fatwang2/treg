@@ -279,7 +279,7 @@
   .side-acct{margin-top:auto;display:flex;align-items:center;gap:8px;padding:7px 8px;border:1px solid var(--line);border-radius:var(--rb);background:var(--panel2)}
   .acct-you{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--muted)}
   .side-acct .iconbtn{width:30px;height:30px;font-size:13px}
-  main{padding:22px 26px;max-width:1080px}
+  main{padding:22px 26px;max-width:1080px;width:100%;margin:0 auto}  /* centered in the content column, not left-hugging */
   h1{font-size:19px;margin:0 0 3px;letter-spacing:-.3px} .sub{color:var(--muted);margin:0 0 18px;font-size:13px}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
   .seg{display:inline-flex;gap:3px;background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:3px;margin-bottom:18px}
@@ -326,32 +326,43 @@
   .spin{display:inline-block;width:11px;height:11px;margin-right:7px;vertical-align:-1px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:treg-spin .7s linear infinite}
   @keyframes treg-spin{to{transform:rotate(360deg)}}
   .modal{background:var(--panel);border:1px solid var(--line);border-radius:14px;width:min(680px,94vw);max-height:88vh;overflow:auto}
-  /* onboarding - a docked right-side narrative stepper; content is pushed left so nothing overlaps */
-  .onb-panel{position:fixed;top:0;right:0;bottom:0;width:360px;z-index:60;display:flex;flex-direction:column;
-    background:var(--panel);border-left:1px solid var(--line);box-shadow:-8px 0 30px rgba(20,16,10,.28)}
-  .onb-head{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line)}
-  .onb-x{color:var(--muted);text-decoration:none;font-size:14px} .onb-x:hover{color:var(--ink)}
-  .onb-steps{list-style:none;margin:0;padding:10px 10px 6px;border-bottom:1px solid var(--line)}
-  .onb-steps li{display:flex;align-items:center;gap:9px;padding:6px 8px;border-radius:7px;font-size:12px;color:var(--muted);cursor:pointer}
-  .onb-steps li.on{color:var(--ink);background:var(--panel2)} .onb-steps li.done{color:var(--ink)}
-  .onb-num{display:grid;place-items:center;width:19px;height:19px;border-radius:50%;border:1px solid var(--line);font-size:10.5px;flex:none}
-  .onb-steps li.on .onb-num{background:var(--accent);color:var(--onAccent);border-color:var(--accent)}
-  .onb-steps li.done .onb-num{background:var(--green);color:var(--onAccent);border-color:var(--green)}
-  .onb-body{flex:1;overflow:auto;padding:16px} .onb-body h3{margin:0 0 10px;font-size:15px}
-  .onb-body p{font-family:var(--sans);font-size:13px;line-height:1.55;margin:0 0 10px;color:var(--ink)}
-  .onb-body .mono{color:var(--accent)}
-  .onb-card{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:12px}
-  .onb-ok{color:var(--green);font-family:var(--sans);font-size:12.5px;margin-top:8px}
-  .onb-more{display:inline-block;margin-top:6px;font-size:12px;color:var(--accent);text-decoration:none}
-  .onb-foot{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-top:1px solid var(--line)}
-  .onb-pos{font-size:11px;color:var(--muted)}
-  .onb-push{margin-right:360px;transition:margin-right .18s ease}
-  @media(max-width:820px){ .onb-panel{width:100%;top:auto;height:62vh;border-left:0;border-top:1px solid var(--line)} .onb-push{margin-right:0} }
+  /* first-run welcome: agent picker cards + the Skip/Next footer */
+  .agent-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  @media(max-width:560px){ .agent-grid{grid-template-columns:repeat(2,1fr)} }
+  .agent-card{display:flex;align-items:center;gap:9px;padding:12px 13px;border:1px solid var(--line);border-radius:10px;background:var(--panel2);color:var(--ink);font-family:inherit;font-size:13.5px;cursor:pointer;text-align:left}
+  .agent-card img{width:20px;height:20px;flex:none}
+  .agent-card.on{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink);background:var(--bg)}
+  .wc-foot{display:flex;justify-content:space-between;align-items:center;margin-top:22px;padding-top:16px;border-top:1px solid var(--line)}
+  /* Getting started: numbered step cards, the agent dropdown, and the try-it example grid */
+  .start-card{border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+  .start-hd{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line)}
+  .start-num{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--ink);color:var(--bg);font-size:13px;font-weight:700;flex:none}
+  .start-bd{padding:18px}
+  .agent-menu{position:absolute;top:calc(100% + 6px);left:0;z-index:40;min-width:200px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px;display:flex;flex-direction:column;gap:2px;box-shadow:0 10px 30px rgba(0,0,0,.18)}
+  .agent-menu .agent-card{border:0;background:none;width:100%;padding:8px 10px;box-shadow:none}
+  .agent-menu .agent-card:hover,.agent-menu .agent-card.on{background:var(--panel2)}
+  .try-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:700px){ .try-grid{grid-template-columns:1fr} }
+  .try-card{display:block;text-align:left;padding:14px 16px;border:1px solid var(--line);border-radius:10px;background:var(--panel2);color:var(--ink);font-family:inherit;cursor:pointer;transition:border-color .15s}
+  .try-card:hover{border-color:var(--accent)}
+  .try-cat{display:flex;align-items:center;justify-content:space-between;font-size:10.5px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+  .try-ico{width:15px;height:15px;flex:none}
+  .try-ico.avatar{border-radius:50%}
+  .try-copy{font-weight:400;letter-spacing:0;text-transform:none;font-size:11.5px;color:var(--muted)}
+  .try-card:hover .try-copy{color:var(--accent)} .try-copy.done{color:var(--green)}
+  .try-txt{display:block;font-family:var(--sans);font-size:13px;line-height:1.55;color:var(--ink)}
+  .oauth-grp{font-family:var(--sans);font-size:12.5px;font-weight:600;color:var(--ink);margin-bottom:8px}
+  .prov-chip{display:inline-flex;align-items:center;gap:7px;padding:7px 12px;border:1px solid var(--line);border-radius:999px;background:var(--panel2);font-family:var(--sans);font-size:12.5px;color:var(--ink);cursor:pointer;transition:border-color .15s}
+  .prov-chip img{width:15px;height:15px;flex:none}
+  .prov-chip:hover{border-color:var(--accent)}
+  .oauth-div{display:flex;align-items:center;gap:14px;margin-top:28px;margin-bottom:4px;color:var(--muted);font-family:var(--sans);font-size:12.5px;white-space:nowrap}
+  .oauth-div::before,.oauth-div::after{content:'';flex:1;border-top:1px solid var(--line);min-width:20px}
+  .soon-note{position:relative;font-family:var(--sans);font-size:12px;color:var(--muted);cursor:default;border-bottom:1px dotted var(--muted)}
+  .soon-note::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 7px);left:50%;transform:translateX(-50%);white-space:nowrap;background:var(--ink);color:var(--bg);font-size:11.5px;padding:5px 10px;border-radius:7px;opacity:0;pointer-events:none;transition:opacity .12s}
+  .soon-note:hover::after{opacity:1}
   .chip.demo{border-color:var(--accent);color:var(--accent)}
   .modal .hd{display:flex;justify-content:space-between;align-items:center;padding:15px 18px;border-bottom:1px solid var(--line)}
   .drawer{position:fixed;top:0;right:0;height:100vh;width:min(520px,96vw);background:var(--panel);border-left:1px solid var(--line);z-index:50;box-shadow:-12px 0 44px rgba(20,16,10,.34);display:flex;flex-direction:column}
-  .drawer.onb-shift{right:360px}  /* sit left of the onboarding panel instead of overlapping it */
-  @media(max-width:820px){ .drawer.onb-shift{right:0} }
   pre{margin:0;padding:14px;background:var(--bg);border:1px solid var(--line);border-radius:10px;font-family:var(--mono);font-size:12.5px;overflow:auto;white-space:pre-wrap;word-break:break-word;max-height:50vh}
   pre.code{white-space:pre;overflow-x:auto;word-break:normal;overflow-wrap:normal;line-height:1.55}
   .field{display:flex;gap:8px;margin:8px 0} .field input,.field select{background:var(--bg);border:1px solid var(--line);color:var(--ink);border-radius:var(--rb);padding:8px 10px;font-family:var(--mono);font-size:13px} .field input{flex:1}
@@ -612,7 +623,7 @@ th{background:rgba(0,0,0,.25)}
   box-shadow:rgba(255,255,255,.07) 0 1px 0 inset, rgba(0,0,0,.35) 0 10px 24px -14px}
 .card{background:linear-gradient(180deg,#1e1d1b 0%,#171614 100%);
   box-shadow:rgba(255,255,255,.07) 0 1px 0 inset}
-.modal,.drawer,.onb-panel{background:linear-gradient(180deg,#201f1d,#171614)}
+.modal,.drawer{background:linear-gradient(180deg,#201f1d,#171614)}
 .term{background:#0d0c0b;border-color:var(--line)}
 .lc-codewrap{background:#0d0c0b}
 :root:not([data-theme=light]) pre{background:rgba(0,0,0,.28);
@@ -728,7 +739,7 @@ input[type=checkbox],input[type=radio]{accent-color:var(--ink)}
 .side{background:var(--panel)}
 .stat{background:var(--surface);border-color:transparent;box-shadow:var(--shadow-sm)}
 .card{background:var(--surface);border-color:transparent;box-shadow:var(--shadow-sm)}
-.modal,.drawer,.onb-panel{background:var(--surface);box-shadow:var(--shadow-lg)}
+.modal,.drawer{background:var(--surface);box-shadow:var(--shadow-lg)}
 .ttable-wrap,table{box-shadow:none}
 .ttable-wrap{background:var(--surface);border-color:var(--line)}
 table{background:var(--surface)}
@@ -831,7 +842,6 @@ a:hover{text-decoration-color:var(--muted)}
 .tswitch input:checked+.knob{background:var(--ink)}
 .tswitch input:checked+.knob::after{background:var(--bg)}
 .spin{border-top-color:var(--ink)}
-.onb-steps li.on .onb-num{background:var(--ink);color:var(--bg);border-color:var(--ink)}
 .loginbox{background:var(--surface);border:0;border-radius:var(--r);box-shadow:var(--shadow-md)}
 
 /* ---- 3.7 the platform ledger ----
@@ -1230,13 +1240,13 @@ a:hover{text-decoration-color:var(--muted)}
 
   <template v-else>
     <a href="#maincontent" class="skip">Skip to content</a>
-    <div class="top" :class="{'onb-push':onb.on}" role="banner">
+    <div class="top" role="banner">
       <div class="brand">▚ treg</div>
       <div class="search"><span class="muted">/</span><input ref="search" v-model="q" :placeholder="view==='connections'?'search the catalog…':'search tools…'" aria-label="Search"/></div>
       <div class="spacer"></div>
     </div>
 
-    <div class="layout" :class="{'onb-push':onb.on}">
+    <div class="layout">
       <nav class="side">
         <!-- ORG (top): name → settings · ▾ → switch -->
         <div class="orgblock">
@@ -1266,8 +1276,9 @@ a:hover{text-decoration-color:var(--muted)}
 
         <!-- NAV (middle) -->
         <div class="side-nav">
+          <button class="nav" :class="{active:view==='start'}" @click="go('start')" style="gap:6px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>Getting started</button>
           <button v-if="canRegister" class="nav" :class="{active:view==='connections'}" @click="go('connections')" style="gap:6px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>Catalog</button>
-          <button class="nav" :class="{active:view==='tools'||view==='secrets'}" @click="go('tools')" style="gap:6px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>Your tools</button>
+          <button class="nav" :class="{active:view==='tools'||view==='secrets'}" @click="go('tools')" style="gap:6px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>Your vault</button>
           <button class="nav" :class="{active:view==='activity'}" @click="go('activity')" style="gap:6px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Activity</button>
           <button v-if="canAdmin" class="nav" :class="{active:view==='usage'}" @click="go('usage')" style="gap:6px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Usage</button>
           <button class="nav" :class="{active:view==='orgs'}" @click="go('orgs')" style="gap:6px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Team</button>
@@ -1276,7 +1287,6 @@ a:hover{text-decoration-color:var(--muted)}
           <div class="agent-copy"><span class="ac-label ac-link" @click="agentGuide='agent'" title="Preview / customize">Agent instruction</span><button class="ac-btn" :class="{done:agentRowCopied==='agent'}" @click="copyAgentGuide('agent')" title="Copy the one instruction: it installs the CLI, signs your agent in, and gets it calling tools">{{agentRowCopied==='agent'?'✓':'⧉'}}</button></div>
           <div v-if="myToken" class="agent-copy"><span class="ac-label">API token</span><button class="ac-btn" :class="{done:tokenCopied}" @click="copyToken" title="Copy your API token (for X-Treg-Token)">{{tokenCopied?'✓':'⧉'}}</button></div>
           <div class="grp" style="margin-top:auto">Help</div>
-          <button class="nav" :class="{active:view==='start'}" @click="go('start')" style="gap:6px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>Getting started</button>
           <button class="nav" :class="{active:view==='help'}" @click="helpMode=null; go('help')" style="gap:6px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>Tutorial</button>
         </div>
 
@@ -1309,7 +1319,7 @@ a:hover{text-decoration-color:var(--muted)}
         <!-- TOOLS -->
         <template v-if="view==='connections'">
           <div class="tut-head">
-            <div><h1>Catalog in {{activeName}}</h1><p class="sub" style="margin:0">Connect an account once. treg holds the credential server-side and injects it on every call — nothing lands on your machine.</p></div>
+            <div><h1>2,600+ tools for agents</h1><p class="sub" style="margin:0">Connect an account once. treg holds the credential server-side and injects it on every call — nothing lands on your machine.</p></div>
             <!-- (The balance pill lives in the side nav, above the account block.) -->
           </div>
           <div v-if="connErr" class="banner" style="margin-top:12px">{{connErr}}</div>
@@ -1801,7 +1811,7 @@ a:hover{text-decoration-color:var(--muted)}
             <span>{{orgMsg}}</span><button class="btn sm ico" @click="orgMsg=''" aria-label="Dismiss">✕</button>
           </div>
           <div class="tut-head">
-            <div><h1>Skills &amp; Secrets in {{activeName}}</h1>
+            <div><h1>Bring your own keys &amp; skills</h1>
               <div v-if="canRegister" class="tabs" style="margin:8px 0 4px">
                 <button class="active">Skills &amp; tools</button>
                 <button @click="go('secrets')">Secrets</button>
@@ -1993,7 +2003,7 @@ a:hover{text-decoration-color:var(--muted)}
             <span>{{secretErr}}</span><button class="btn sm ico" @click="secretErr=''" aria-label="Dismiss">✕</button>
           </div>
           <div class="tut-head">
-            <div><h1>Skills &amp; Secrets in {{activeName}}</h1>
+            <div><h1>Bring your own keys &amp; skills</h1>
               <div class="tabs" style="margin:8px 0 4px">
                 <button @click="go('tools')">Skills &amp; tools</button>
                 <button class="active">Secrets</button>
@@ -2497,10 +2507,67 @@ a:hover{text-decoration-color:var(--muted)}
 
         <!-- GETTING STARTED -->
         <template v-if="view==='start'">
+          <div style="max-width:760px;margin:0 auto">
           <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
             <h1 style="margin:0">Getting started</h1>
           </div>
-          <div class="seg" style="margin-top:8px">
+
+          <!-- ① Set up your <agent> — the setup line + your API key, combined -->
+          <div class="start-card" style="margin-top:14px">
+            <div class="start-hd">
+              <span class="start-num">1</span>
+              <b style="font-size:16px">Set up your</b>
+              <div style="position:relative">
+                <button type="button" class="agent-card" style="padding:8px 12px;gap:8px" @click="startAgentOpen=!startAgentOpen">
+                  <img v-if="welcomeAgent.icon" :src="agentIcon(welcomeAgent.icon)" alt="" onerror="this.style.visibility='hidden'"/><span v-else style="font-size:14px;width:20px;text-align:center;flex:none">✳</span>
+                  <span>{{welcomeAgent.name}}</span><span style="color:var(--muted);font-size:11px">▾</span>
+                </button>
+                <div v-if="startAgentOpen" class="agent-menu">
+                  <button v-for="a in welcomeAgents.concat(welcomeMoreAgents)" :key="a.id" type="button" class="agent-card" :class="{on:welcome.agent===a.id}" @click="welcome.agent=a.id; startAgentOpen=false">
+                    <img v-if="a.icon" :src="agentIcon(a.icon)" alt="" onerror="this.style.visibility='hidden'"/><span v-else style="font-size:14px;width:20px;text-align:center;flex:none">✳</span><span>{{a.name}}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="start-bd">
+              <p class="sub" style="display:flex;align-items:center;gap:8px;margin:0 0 14px"><img v-if="welcomeAgent.icon" :src="agentIcon(welcomeAgent.icon)" alt="" style="width:17px;height:17px" onerror="this.style.visibility='hidden'"/>Setting up treg for <b style="color:var(--ink)">{{welcomeAgent.name}}</b></p>
+              <p style="font-family:var(--sans);font-size:14px;margin:0 0 10px">In your agent's chat, send:</p>
+              <div class="lc-codewrap"><button class="lc-cp" @click="copyStart(welcomeSetupCmd,'gsc')">{{startCopied==='gsc'?'✓ copied':'copy'}}</button><pre>{{welcomeSetupCmd}}</pre></div>
+              <template v-if="myToken">
+                <div class="lbl" style="margin-top:22px">Your API key</div>
+                <p class="sub" style="margin:6px 0 10px">Already created. Setup signs your agent in automatically — but if it ever asks for a key, give it this one (header <span class="mono">X-Treg-Token</span>).</p>
+                <div class="lc-codewrap"><button class="lc-cp" @click="copyStart(myToken,'gsk')">{{startCopied==='gsk'?'✓ copied':'copy'}}</button><pre>{{startTokenShow ? myToken : (myToken.slice(0,14)+'••••••••••••••••')}}</pre></div>
+                <a href="#" class="sub" style="font-size:12px;display:inline-block;margin-top:6px" @click.prevent="startTokenShow=!startTokenShow">{{startTokenShow?'Hide':'Show'}} key</a>
+              </template>
+            </div>
+          </div>
+
+          <!-- ② Try it out -->
+          <div class="start-card" style="margin-top:22px">
+            <div class="start-hd"><span class="start-num">2</span><b style="font-size:16px">Try it out</b></div>
+            <div class="start-bd">
+              <p class="sub" style="margin:0 0 14px">treg is ready with your agent. Copy any example below and send it to your agent.</p>
+              <div class="try-grid">
+                <button v-for="ex in tryExamples" :key="ex.k" type="button" class="try-card" @click="copyStart(ex.prompt,'try-'+ex.k)">
+                  <span class="try-cat"><span style="display:inline-flex;align-items:center;gap:7px"><img class="try-ico" :src="'/logos/platforms/'+ex.logo+'.svg'" alt=""/><img v-if="ex.avatar" class="try-ico avatar" :src="ex.avatar" alt=""/>{{ex.cat}}</span><span class="try-copy" :class="{done:startCopied==='try-'+ex.k}">{{startCopied==='try-'+ex.k ? '✓ copied' : '⧉ copy'}}</span></span>
+                  <span class="try-txt">{{ex.prompt}}</span>
+                </button>
+              </div>
+              <div class="oauth-div"><span>also connect OAuth to unlock new agent capabilities</span></div>
+              <div v-for="g in tryOauth" :key="g.label" style="margin-top:14px">
+                <div class="oauth-grp">{{g.label}}</div>
+                <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+                  <button v-for="p in g.items" :key="p.s" type="button" class="prov-chip" @click="openProvider(p.s)"><img :src="'/logos/'+p.s+'.svg'" alt=""/>{{p.n}}</button>
+                  <span v-if="g.soon.length" class="soon-note" :data-tip="g.soon.map(p=>p.n).join(', ')">{{g.soon.length}} coming soon</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- The manual CLI paths, kept but tucked away -->
+          <details style="margin-top:26px" :open="startTab==='setup'">
+            <summary class="sub" style="cursor:pointer;margin-bottom:0">Prefer the terminal? Manual CLI setup &amp; sharing your team's keys →</summary>
+            <div class="seg" style="margin-top:14px">
             <button :class="{on:startTab==='access'}" @click="startTab='access'">Access 2000+ treg tools</button>
             <button :class="{on:startTab==='setup'}" @click="startTab='setup'">Setup your team's skills &amp; env vault</button>
           </div>
@@ -2560,6 +2627,9 @@ a:hover{text-decoration-color:var(--muted)}
             <div class="lc-codewrap"><button class="lc-cp" @click="copyStart('treg skill ls\ntreg skill install seo-blog-writer                    # a teammate pulls one (or --all)\ntreg call https://api.stripe.com/v1/charges','cc')">{{startCopied==='cc'?'✓ copied':'copy'}}</button><pre><span class="hl-cmd">treg</span> skill ls
 <span class="hl-cmd">treg</span> skill install seo-blog-writer
 <span class="hl-cmd">treg</span> call <span class="hl-str">https://api.stripe.com/v1/charges</span></pre></div>
+          </div>
+          </details>
+
           </div>
         </template>
 
@@ -2920,17 +2990,50 @@ a:hover{text-decoration-color:var(--muted)}
       </div>
     </div>
 
-    <!-- FIRST-RUN WELCOME: name your team (the primary onboarding path) -->
+    <!-- FIRST-RUN WELCOME: name your team → pick your agent → the setup line (the primary onboarding path) -->
     <div class="scrim" role="dialog" aria-modal="true" v-if="welcome.on">
-      <div class="modal" style="width:min(470px,94vw)">
+      <div class="modal" :style="{width: welcome.step===0?'min(470px,94vw)':'min(560px,94vw)'}">
         <div style="padding:26px 26px 22px">
-          <div style="color:var(--accent);font-size:15px;letter-spacing:.5px;margin-bottom:12px">▚ treg</div>
-          <h2 style="margin:0 0 8px;font-size:20px">Welcome{{me?', '+me.split('@')[0]:''}} 👋</h2>
-          <p class="sub" style="margin:0 0 18px">Create your team — it's where you keep API keys and skills so your teammates and their agents can call them <b>without holding the keys</b>. You can invite people and add secrets right after.</p>
-          <div class="field"><input v-model="welcome.name" placeholder="Team name, e.g. Superdesign" @keyup.enter="welcomeCreate"/></div>
-          <button class="btn primary" style="width:100%;margin-top:4px" @click="welcomeCreate" :disabled="welcome.busy">{{welcome.busy?'Creating…':'Create team →'}}</button>
+          <template v-if="welcome.step===0">
+            <div style="color:var(--accent);font-size:15px;letter-spacing:.5px;margin-bottom:12px">▚ treg</div>
+            <h2 style="margin:0 0 8px;font-size:20px">Welcome{{me?', '+me.split('@')[0]:''}} 👋</h2>
+            <p class="sub" style="margin:0 0 18px">Create your team — it's where you keep API keys and skills so your teammates and their agents can call them <b>without holding the keys</b>. You can invite people and add secrets right after.</p>
+            <div class="field"><input v-model="welcome.name" placeholder="Team name, e.g. Superdesign" @keyup.enter="welcomeCreate"/></div>
+            <button class="btn primary" style="width:100%;margin-top:4px" @click="welcomeCreate" :disabled="welcome.busy">{{welcome.busy?'Creating…':'Create team →'}}</button>
+          </template>
+          <template v-else-if="welcome.step===1">
+            <div style="color:var(--accent);font-size:15px;letter-spacing:.5px;margin-bottom:12px">▚ treg</div>
+            <h2 style="margin:0 0 8px;font-size:20px">Which agent are you using?</h2>
+            <p class="sub" style="margin:0 0 18px">Choose your agent for the best setup instructions.</p>
+            <div class="agent-grid">
+              <button v-for="a in welcomeAgents" :key="a.id" type="button" class="agent-card" :class="{on:welcome.agent===a.id}" @click="welcome.agent=a.id; welcome.moreOpen=false">
+                <img :src="agentIcon(a.icon)" alt="" onerror="this.style.visibility='hidden'"/><span>{{a.name}}</span>
+              </button>
+              <button type="button" class="agent-card" :class="{on:welcome.moreOpen || welcomeIsMore}" @click="welcome.moreOpen=!welcome.moreOpen">
+                <span style="font-size:15px;width:20px;text-align:center;flex:none">☰</span><span>{{welcomeIsMore && !welcome.moreOpen ? welcomeAgent.name : 'More'}}</span><span style="margin-left:auto;color:var(--muted)">▾</span>
+              </button>
+            </div>
+            <div v-if="welcome.moreOpen" class="agent-grid" style="margin-top:10px">
+              <button v-for="a in welcomeMoreAgents" :key="a.id" type="button" class="agent-card" :class="{on:welcome.agent===a.id}" @click="welcome.agent=a.id; welcome.moreOpen=false">
+                <img v-if="a.icon" :src="agentIcon(a.icon)" alt="" onerror="this.style.visibility='hidden'"/><span v-else style="font-size:15px;width:20px;text-align:center;flex:none">✳</span><span>{{a.name}}</span>
+              </button>
+            </div>
+            <div class="wc-foot">
+              <a href="#" class="sub" @click.prevent="welcomeFinish">Skip</a>
+              <button class="btn primary" @click="welcome.step=2">Next →</button>
+            </div>
+          </template>
+          <template v-else>
+            <p class="sub" style="display:flex;align-items:center;gap:8px;margin:0 0 16px"><img v-if="welcomeAgent.icon" :src="agentIcon(welcomeAgent.icon)" alt="" style="width:18px;height:18px" onerror="this.style.visibility='hidden'"/>Setting up treg for <b style="color:var(--ink)">{{welcomeAgent.name}}</b></p>
+            <h2 style="margin:0 0 14px;font-size:19px">In your agent's chat, send:</h2>
+            <div class="lc-codewrap"><button class="lc-cp" @click="copyStart(welcomeSetupCmd,'wc')">{{startCopied==='wc'?'✓ copied':'copy'}}</button><pre>{{welcomeSetupCmd}}</pre></div>
+            <p class="sub" style="font-size:12px;margin:12px 0 0">Your agent reads that file and sets everything up — installs the CLI, signs in, and starts calling tools. The full guide is always on <b>Getting started</b>.</p>
+            <div class="wc-foot">
+              <a href="#" class="sub" @click.prevent="welcome.step=1">← Back</a>
+              <button class="btn primary" @click="welcomeFinish">Done ✓</button>
+            </div>
+          </template>
           <div v-if="welcome.err" class="banner" style="margin-top:12px">{{welcome.err}}</div>
-          <p class="sub" style="font-size:12px;margin:14px 0 0">You'll invite teammates and add secrets right after. (There's a guided walkthrough in <b>Help</b> once you're in.)</p>
         </div>
       </div>
     </div>
@@ -2944,91 +3047,6 @@ a:hover{text-decoration-color:var(--muted)}
           <div v-if="orgErr" class="banner" style="margin-top:12px">{{orgErr}}</div>
         </div></div>
     </div>
-
-    <!-- ONBOARDING: docked narrative stepper -->
-    <aside class="onb-panel" v-if="onb.on">
-      <div class="onb-head"><span><b>▚ Getting started</b></span><span style="display:flex;gap:12px;align-items:center"><a href="#" class="onb-x" @click.prevent="onbRestart" title="Start over from step 1" aria-label="Restart onboarding">↺ Restart</a><a href="#" class="onb-x" @click.prevent="onbFinish" aria-label="Skip onboarding">✕</a></span></div>
-      <ol class="onb-steps">
-        <li v-for="(s,idx) in onbSteps" :key="idx" :class="{on:idx===onb.i, done:idx<onb.i}" @click="onbGoto(idx)">
-          <span class="onb-num">{{onb.i>idx?'✓':idx+1}}</span><span>{{s}}</span>
-        </li>
-      </ol>
-      <div class="onb-body">
-        <template v-if="onb.i===0">
-          <h3>Keys your team shares - without sharing keys</h3>
-          <p>treg is where your team keeps its API credentials, so nobody has to keep them. Two pains it kills:</p>
-          <p>• <b>Env-var sprawl</b> - the same keys copied across machines, environments and <span class="mono">.env</span> files. Centralize them once, here.</p>
-          <p>• <b>Onboarding people <i>and</i> AI agents</b> - a new teammate, or a <b>Claude Code</b> agent, needs an API? They call it <i>through</i> treg; the key never leaves the server.</p>
-        </template>
-        <template v-else-if="onb.i===1">
-          <h3>Add your own keys &amp; skills</h3>
-          <p>Load what you already have - your <span class="mono">.env</span> keys and skill folders - into <b>{{activeName}}</b>. Fastest is handing the instruction to your coding agent; the manual path is the same flow by hand.</p>
-          <div class="seg" style="margin-bottom:10px">
-            <button :class="{on:onb.tab==='manual'}" @click="onb.tab='manual'">Manual</button>
-            <button :class="{on:onb.tab==='agent'}" @click="onb.tab='agent'">Agent instruction</button>
-          </div>
-          <template v-if="onb.tab==='agent'">
-            <p class="muted" style="font-size:12px">Paste into Claude Code / Codex / Gemini - it installs the CLI, signs in, gets calling straight away, and offers to register your keys + skills (read-only scan first, you approve).</p>
-            <div class="lc-codewrap"><button class="lc-cp" @click="copyAgentGuide('agent')">{{agentRowCopied==='agent'?'✓ copied':'copy'}}</button><pre style="max-height:170px;overflow:auto">{{buildAgentPrompt('agent', true)}}</pre></div>
-          </template>
-          <template v-else>
-            <p class="muted" style="font-size:12px">1 · Install the CLI &amp; sign in</p>
-            <div class="lc-codewrap"><button class="lc-cp" @click="copyStart('curl -fsSL '+proxy+'/install.sh | sh\ntreg login','ob1')">{{startCopied==='ob1'?'✓ copied':'copy'}}</button><pre><span class="hl-cmd">curl</span> <span class="hl-flag">-fsSL</span> <span class="hl-str">{{proxy}}/install.sh</span> | sh
-<span class="hl-cmd">treg</span> login</pre></div>
-            <p class="muted" style="font-size:12px;margin-top:10px">2 · Preview, then upload — it scans your <span class="mono">.env</span> + skill folders, you pick what to share:</p>
-            <div class="lc-codewrap"><button class="lc-cp" @click="copyStart('treg scan\ntreg upload --all','ob2b')">{{startCopied==='ob2b'?'✓ copied':'copy'}}</button><pre><span class="hl-comment"># preview what's here (read-only)</span>
-<span class="hl-cmd">treg</span> scan
-<span class="hl-comment"># register keys + skills</span>
-<span class="hl-cmd">treg</span> upload <span class="hl-flag">--all</span></pre></div>
-          </template>
-          <p class="muted" style="font-size:12px;margin-top:8px">The full guide lives on this page (<b>Getting started</b>) whenever you need it.</p>
-        </template>
-        <template v-else-if="onb.i===2">
-          <h3>Add a teammate</h3>
-          <p>Bring someone in - they get <b>access</b>, never your keys. Inviting an email mints a one-time code; they prove that email (any login) and they're in.</p>
-          <p class="muted" style="font-size:12px">Roles set what they can do: <b>viewer</b> call+read · <b>member</b> +register tools/secrets · <b>admin</b> +invite/manage · <b>owner</b> +roles/delete.</p>
-          <div class="onb-card"><b>{{onb.teammate.name}}</b> · <span class="mono">{{onb.teammate.email}}</span> · {{onb.teammate.role}}</div>
-          <button v-if="!onb.invited" class="btn primary" style="width:100%;margin-top:8px" @click="onbInviteTeammate" :disabled="onb.busy">{{onb.busy?'Inviting…':'Invite '+onb.teammate.name.split(' ')[0]+' →'}}</button>
-          <p v-else class="onb-ok">✓ {{onb.teammate.name.split(' ')[0]}} joined - see them in <b>Members</b>. Real teammates &amp; AI agents get access the same way.</p>
-        </template>
-        <template v-else-if="onb.i===3">
-          <h3>Call without exposing keys</h3>
-          <p>A teammate (or their agent) uses everything you just shared - the credential is injected server-side and never lands on their machine.</p>
-          <div class="seg" style="margin-bottom:10px">
-            <button :class="{on:onb.tab==='manual'}" @click="onb.tab='manual'">Manual</button>
-            <button :class="{on:onb.tab==='agent'}" @click="onb.tab='agent'">Agent instruction</button>
-          </div>
-          <template v-if="onb.tab==='agent'">
-            <p class="muted" style="font-size:12px">Paste into their coding agent - it installs the CLI, signs in as them, and makes a real call. No API keys on their machine.</p>
-            <div class="lc-codewrap"><button class="lc-cp" @click="copyAgentGuide('agent')">{{agentRowCopied==='agent'?'✓ copied':'copy'}}</button><pre style="max-height:170px;overflow:auto">{{buildAgentPrompt('agent', true)}}</pre></div>
-          </template>
-          <template v-else>
-            <p class="muted" style="font-size:12px">1 · Browse the shared library &amp; pull a skill</p>
-            <div class="lc-codewrap"><button class="lc-cp" @click="copyStart('treg skill ls\ntreg skill install <name>','ob3')">{{startCopied==='ob3'?'✓ copied':'copy'}}</button><pre><span class="hl-cmd">treg</span> skill ls
-<span class="hl-comment"># installs into .claude/skills/</span>
-<span class="hl-cmd">treg</span> skill install &lt;name&gt;</pre></div>
-            <p class="muted" style="font-size:12px;margin-top:10px">2 · Call an endpoint, or run a vendor CLI - key injected server-side</p>
-            <div class="lc-codewrap"><button class="lc-cp" @click="copyStart('treg call https://api.stripe.com/v1/charges\ntreg run stripe -- balance retrieve','ob4')">{{startCopied==='ob4'?'✓ copied':'copy'}}</button><pre><span class="hl-comment"># an API endpoint…</span>
-<span class="hl-cmd">treg</span> call <span class="hl-str">https://api.stripe.com/v1/charges</span>
-<span class="hl-comment"># …or a vendor CLI</span>
-<span class="hl-cmd">treg</span> run stripe -- balance retrieve</pre></div>
-          </template>
-        </template>
-        <template v-else>
-          <h3>You're set 🎉</h3>
-          <p>That's the whole loop: <b>register once, share access not secrets, keep the audit trail.</b></p>
-          <p>Go further: register your own tools (env keys, <b>OAuth</b>, file creds - see <b>Auth shapes</b>), or package a whole <b>skill folder</b> with a <span class="mono">treg.json</span> (see <b>Skills</b>). Point <b>Claude Code</b> at treg, and replay this anytime from <b>Help → Guided setup</b>.</p>
-        </template>
-        <a href="#" class="onb-more" @click.prevent="readMore(onbSection)">{{onbMoreLabel}}</a>
-        <div v-if="onb.err" class="banner" style="margin-top:10px">{{onb.err}}</div>
-      </div>
-      <div class="onb-foot">
-        <a href="#" class="sub" v-if="onb.i>0" @click.prevent="onbBack">← Back</a>
-        <span class="onb-pos">{{onb.i+1}} / {{onbSteps.length}}</span>
-        <button class="btn sm primary" v-if="onb.i<onbSteps.length-1" @click="onbNext">Next →</button>
-        <button class="btn sm primary" v-else @click="onbFinish">Done ✓</button>
-      </div>
-    </aside>
 
     <!-- ADD ORG -->
     <div class="scrim" role="dialog" aria-modal="true" v-if="addOrg" @click.self="addOrg=false">
@@ -3131,7 +3149,7 @@ a:hover{text-decoration-color:var(--muted)}
     <!-- TRY -->
     <!-- USE drawer: one entry point, two verbs — API call (proxy) / CLI run (server) -->
     <div class="scrim" role="dialog" aria-modal="true" v-if="tryTool" @click.self="tryTool=null" style="place-items:stretch;justify-items:end">
-      <div class="drawer" :class="{'onb-shift':onb.on}"><div class="hd" style="padding:15px 18px;border-bottom:1px solid var(--line)"><b>Use “{{tryTool.name}}”</b><button class="btn sm" @click="tryTool=null" aria-label="Close">✕</button></div>
+      <div class="drawer"><div class="hd" style="padding:15px 18px;border-bottom:1px solid var(--line)"><b>Use “{{tryTool.name}}”</b><button class="btn sm" @click="tryTool=null" aria-label="Close">✕</button></div>
         <div style="padding:16px 18px;overflow:auto">
           <div v-if="canCall(tryTool) && canRun(tryTool)" class="exrow" style="margin-bottom:12px">
             <span class="exchip" :class="{on:useMode==='call'}" @click="useMode='call'"><span class="m">HTTP</span>API call</span>
@@ -3170,7 +3188,7 @@ a:hover{text-decoration-color:var(--muted)}
          key when one exists, else treg's key billed to the team balance — and logged in Activity
          exactly like a CLI call. -->
     <div class="scrim" role="dialog" aria-modal="true" v-if="epTry" @click.self="epTry=null" style="place-items:stretch;justify-items:end">
-      <div class="drawer" :class="{'onb-shift':onb.on}"><div class="hd" style="padding:15px 18px;border-bottom:1px solid var(--line)"><b>Try “{{epTry.id}}”</b><button class="btn sm" @click="epTry=null" aria-label="Close">✕</button></div>
+      <div class="drawer"><div class="hd" style="padding:15px 18px;border-bottom:1px solid var(--line)"><b>Try “{{epTry.id}}”</b><button class="btn sm" @click="epTry=null" aria-label="Close">✕</button></div>
         <div class="bd" style="padding:16px 18px;overflow:auto">
           <p class="explain"><span class="mono">{{epTry.method||'GET'}} {{epTry.path}}</span><br>{{epTry.summary}}</p>
           <p class="sub" v-if="epTryAccess" style="margin:0 0 12px">
@@ -3286,17 +3304,16 @@ createApp({
       shareGate:null,  // logged-out arrival at a shared detail link: {kind,name} → focused sign-in page (no sandbox/tour)
       share:{on:false, email:'', role:'viewer', full:true, busy:false, err:'', sent:null, member:null},  // detail-page "Share…" (invite + land on this page)
       me:'', myOrgs:[], isAdmin:false,
-      onboarded:true,  // first-run onboarding (narrative stepper) - see onb.*
-      welcome:{on:false, name:'', busy:false, err:''},  // first-run: name your team (the primary path)
+      onboarded:true,  // first-run onboarding done (server flag; gates the welcome modal)
+      welcome:{on:false, step:0, name:'', agent:'openclaw', moreOpen:false, busy:false, err:''},  // first-run: name your team → pick your agent → setup line
       emptyTab:'agent',
-      onb:{on:false, i:0, tab:'manual', teamName:'Acme Design', teammate:{name:'Alex Rivera', email:'alex@demo.treg.local', role:'member'}, busy:false, err:'', invited:false, tool:false},
       tools:[], health:{}, calls:[], runs:[], adminStats:null, adminOrgs:[], adminUsers:[],
       adminBusy:false, confirmAdmUser:null, confirmAdmOrg:null,
       proxy: location.origin, copyTool:null, snippetTab:'cURL', snippetTabs:['cURL','CLI','Claude Code','Python','Node'], copied:false,
       exPath:'<PATH>', exMethod:'GET',
       tryTool:null, tryMethod:'GET', tryPath:'', tryBody:'', trying:false, tryResp:null, tryStatus:0, tryMs:0,
       useMode:'call', runArgsStr:'', running:false, runOut:null,
-      startCopied:'', startTab:'access', mdMenu:false, llmsCopied:false, myToken:null, tokenCopied:false,
+      startCopied:'', startTab:'access', startAgentOpen:false, startTokenShow:false, mdMenu:false, llmsCopied:false, myToken:null, tokenCopied:false,
       agentGuide:null, agentGuideCopied:false, agentInclToken:true, agentRowCopied:null,
       demo:{
         token:null, org_slug:'', ttl:60, busy:false, err:'', copied:'', signin:false,
@@ -3608,9 +3625,6 @@ createApp({
     snip(){ return this.buildSnippet(this.snippetTab); },
     recipeSnip(){ return this.recipeSnippet(this.recipeTab); },
     tutData(){ return window.TREG_TUTORIAL || {concepts:[], roles:{cols:[],rows:[]}, steps:[]}; },
-    onbSteps(){ return ['Why treg','Add your own keys','Add a teammate','Call without keys',"You're set"]; },
-    onbSection(){ return ['concepts','skills','roles','auth','concepts'][this.onb.i] || 'concepts'; },
-    onbMoreLabel(){ return 'Read more: '+({concepts:'Concepts',roles:'Roles',auth:'Auth shapes',skills:'Skills'}[this.onbSection]||'tutorial')+' →'; },
     tutSteps(){ return this.tutData.steps; },
     tutStep(){ return this.tutSteps[this.tut.i]; },
     xtutSteps(){ return (this.helpMode==='import-shell' ? this.tutData.importShell : this.tutData.access) || []; },
@@ -3623,6 +3637,36 @@ createApp({
     activeOrgId(){ return this.activeOrg ? this.activeOrg.org_id : null; },
     canAdmin(){ return ['admin','owner'].includes(this.activeRole); },
     agentPromptText(){ return this.buildAgentPrompt(this.agentGuide, this.agentInclToken); },
+    // first-run welcome: the agent picker (step 1) and the per-agent setup line (step 2)
+    welcomeAgents(){ return [
+      {id:'openclaw', name:'OpenClaw', icon:'openclaw-color'},
+      {id:'hermes', name:'Hermes Agent', icon:'hermesagent'},
+      {id:'claudeai', name:'Claude.ai', icon:'claude-color'},
+      {id:'claude-code', name:'Claude Code', icon:'claudecode-color'},
+      {id:'codex', name:'Codex', icon:'codex-color'},
+    ]; },
+    welcomeMoreAgents(){ return [
+      {id:'opencode', name:'opencode', icon:'opencode'},
+      {id:'pi', name:'pi', icon:'pi'},
+      {id:'cursor', name:'Cursor', icon:'cursor'},
+      {id:'gemini-cli', name:'Gemini CLI', icon:'gemini-color'},
+      {id:'other', name:'Other', icon:null},
+    ]; },
+    welcomeAgent(){ return this.welcomeAgents.concat(this.welcomeMoreAgents).find(a=>a.id===this.welcome.agent) || this.welcomeAgents[0]; },
+    welcomeIsMore(){ return this.welcomeMoreAgents.some(a=>a.id===this.welcome.agent); },
+    welcomeSetupCmd(){ return 'set up treg — '+this.proxy+'/llms.txt'; },
+    tryExamples(){ return [
+      {k:'enr',  cat:'Get contact emails',      logo:'people', avatar:'https://pbs.twimg.com/profile_images/1131851609774985216/OcsssQ9J_400x400.png', prompt:'Use treg to find the work email of OpenClaw\'s creator'},
+      {k:'trend',cat:'Trending videos pattern', logo:'tiktok',  prompt:'Use treg to pull today\'s top trending TikTok videos and tell me the patterns worth copying.'},
+      {k:'serp', cat:'Keyword volume',          logo:'google',  prompt:'Use treg to pull real monthly search volume and top related keywords worth targeting for my business'},
+      {k:'soc',  cat:'Scrape linkedin',         logo:'linkedin',prompt:'Use treg to look up linkedin.com/in/jasonzhoudesign'},
+    ]; },
+    tryOauth(){ return [
+      {label:'Post on social',      items:[{s:'x',n:'X (Twitter)'},{s:'youtube',n:'YouTube'},{s:'tiktok',n:'TikTok'},{s:'linkedin',n:'LinkedIn'}],
+                                    soon:[{s:'instagram',n:'Instagram'},{s:'facebook',n:'Facebook Pages'}]},
+      {label:'Manage ad campaigns', items:[{s:'google-ads',n:'Google Ads'},{s:'meta-ads',n:'Meta Ads'}], soon:[]},
+      {label:'SEO on your own site',items:[{s:'google-analytics',n:'Google Analytics'},{s:'google-search-console',n:'Search Console'},{s:'google-business-profile',n:'Business Profile'}], soon:[]},
+    ]; },
     // What to actually DO with a freshly minted agent token, in the three shapes people need.
     agentSnippet(){ const a=this.newAgent||this.snipAgent; if(!a) return '';
       const base=this.proxy||location.origin, org=a.org||this.activeSlugNow;
@@ -4363,14 +4407,13 @@ createApp({
     short(e){ return (e||'').split('@')[0]; },
     isPersonal(o){ return !!o && o.name===this.me; },  // personal org = the auto-created one named after your email
     jumpToTeam(){ const t=this.myOrgs.find(o=>!this.isPersonal(o)); if(t) this.switchOrg(t); },
-    // ---- onboarding: a docked narrative stepper where YOU do each action ----
     maybeOnboard(){  // first-run: a brand-new user with no team yet is asked to NAME THEIR TEAM upfront
       // An invite LINK landed here (?invite_org= from /auth/invite-signin's POST)? Open the accept
       // modal even for an onboarded user already in teams — a second-team invite must surface too.
       if(this.inviteLinkOrg!==null && this.pendingInvites.length){ this.openInviteChoice(); return; }
       if(this.inviteLinkOrg!==null && !this.pendingInvites.length && this.sessionMode){
         this.orgMsg='That invite was already used or revoked — ask your teammate to re-invite you if you still need access.'; }
-      if(this.onboarded || !this.sessionMode) return;   // (the guided tour is opt-in from the welcome + Help)
+      if(this.onboarded || !this.sessionMode) return;
       if(this.myOrgs.some(o=>!this.isPersonal(o))) return;
       // Invited here? Show an ACCEPT-INVITE page (join those teams) instead of forcing them to create a
       // throwaway team of their own (confusing: they'd end up with two). Decline → create-team.
@@ -4415,32 +4458,13 @@ createApp({
       this.welcome.busy=true; this.welcome.err='';
       try{ const o=await this.api('/orgs',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name})});
         this.onboarded=true; try{ await this.api('/onboard/skip',{method:'POST'}); }catch(e){}  // don't re-prompt
-        await this.loadAll(); this.switchOrg({slug:o.org}); this.welcome.on=false;
-        this.go('start');  // land on Getting started (#start): the guided setup — agent instruction or manual CLI steps
-        this.onb.invited=false; this.onb.tool=false; this.onb.err=''; this.onb.on=true; this.onbGoto(0);  // walk the stepper alongside it
-        this.orgMsg='Team created. Try the catalog — or copy the Agent instruction from "For your agents" and let your coding agent set it all up.'; }
+        await this.loadAll(); this.switchOrg({slug:o.org});
+        this.welcome.step=1; }  // stay in the modal: pick your agent → get the setup line
       catch(e){ this.welcome.err='Could not create the team: '+(e.detail||e.status); }
       finally{ this.welcome.busy=false; } },
-    onbGoto(i){ this.onb.err=''; this.onb.tab='manual'; this.onb.i=Math.max(0,Math.min(this.onbSteps.length-1,i)); this.closeOverlays();
-      const s=this.onb.i;
-      if(s===1||s===3){ this.go('tools'); }         // adding your own keys + calling happen on the Tools page
-      else if(s===2){ this.go('orgs'); } },         // see the team + the roster fill in
-    onbNext(){ this.onbGoto(this.onb.i+1); },
-    onbBack(){ this.onbGoto(this.onb.i-1); },
-    async onbInviteTeammate(){ const t=this.onb.teammate; this.onb.busy=true; this.onb.err='';
-      try{ await this.api('/orgs/'+this.activeOrgId+'/invites',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email:t.email, role:t.role})});
-        await this.api('/onboard/accept-teammate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email:t.email})});  // auto-join so the roster fills instantly
-        this.onb.invited=true;
-        if(this.view==='orgs') await this.loadOrgAdmin(); else this.go('orgs'); }
-      catch(e){ this.onb.err='Invite failed: '+(e.detail||e.status); }
-      finally{ this.onb.busy=false; } },
-    async onbAddTool(){ this.onb.busy=true; this.onb.err='';
-      try{ await this.api('/onboard/seed-tool',{method:'POST'}); this.onb.tool=true; await this.loadAll(); this.go('tools'); }
-      catch(e){ this.onb.err='Could not add the demo tool: '+(e.detail||e.status); }
-      finally{ this.onb.busy=false; } },
-    onbTryEcho(){ const t=(this.tools||[]).find(x=>x.name==='echo'); if(t){ this.go('tools'); this.openTry(t); } },
-    async onbFinish(){ this.onb.on=false; this.onboarded=true; try{ await this.api('/onboard/skip',{method:'POST'}); }catch(e){} },
-    onbRestart(){ this.onb.invited=false; this.onb.tool=false; this.onb.err=''; this.go('tools'); this.onbGoto(0); },
+    welcomeFinish(){ this.welcome.on=false; this.go('connections');
+      this.orgMsg='Team created. Send your agent the setup line any time — it lives on Getting started.'; },
+    agentIcon(icon){ return 'https://unpkg.com/@lobehub/icons-static-png@latest/'+(this.theme==='dark'?'dark':'light')+'/'+icon+'.png'; },
     async resetDemo(){ try{ await this.api('/onboard/reset',{method:'POST'}); this.onboarded=true; await this.loadAll(); this.orgMsg='Demo teammates removed.'; }
       catch(e){ this.err='Reset failed: '+(e.detail||e.status); } },
     readMore(section){ try{ window.open('/tutorial'+(section?('#'+section):''),'_blank'); }catch(e){} },
@@ -5103,7 +5127,6 @@ createApp({
       }
     },
     async copy(text){ if(!(await this.toClipboard(text))) return; this.copied=true; setTimeout(()=>this.copied=false,1500); },
-    openTry(t){ this.openUse(t); this.useMode='call'; },  // legacy entry (onboarding tour) → the Use drawer, call mode
     // ---- marketplace endpoint Try-it ----
     openEpTry(e){
       this.epTry=e; this.epTryResp=''; this.epTryStatus=null; this.epTryMs=null; this.epTryCost=null;
@@ -5245,12 +5268,14 @@ createApp({
         // a ?invite=<email> share link opened by a DIFFERENT signed-in account: say why it won't resolve
         if(!landed && inv && this.me && inv.toLowerCase()!==this.me.toLowerCase())
           this.detailNote='This share link was sent to '+inv+' — you’re signed in as '+this.me+'. Sign out (⏻) and sign in with that email to accept the invite.'; }
-      else { const hv=this.viewFromHash(); if(hv) this.go(hv, true); }
+      else { const hv=this.viewFromHash(); if(hv) this.go(hv, true);
+        else { this.go('connections', true); history.replaceState({view:'connections'},'','/app#connections'); } }  // no deep link → the marketplace is the default landing
       return; }  // GitHub/email session
     if(this.token){ await this.loadAll();
       const pfTok=this.platformFromHash();
       if(mkRoute) this.openProvider(mkRoute, true); else if(pfTok) this.openPlatform(pfTok, true); else if(route) this.openDetail(route.kind, route.name, true);
-      else { const hv=this.viewFromHash(); if(hv) this.go(hv, true); }
+      else { const hv=this.viewFromHash(); if(hv) this.go(hv, true);
+        else { this.go('connections', true); history.replaceState({view:'connections'},'','/app#connections'); } }
       return; }      // token-in-browser fallback
     // A marketplace link is only meaningful to a member, so a logged-out visitor gets the front
     // door rather than the share gate (which exists to accept skill/tool shares).
