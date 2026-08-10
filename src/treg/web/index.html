@@ -317,6 +317,14 @@
   .tswitch .knob{width:30px;height:17px;border-radius:9px;background:var(--line);position:relative;transition:background .15s;flex:none}
   .tswitch .knob::after{content:'';position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;background:var(--muted);transition:transform .15s,background .15s}
   .tswitch input:checked+.knob{background:var(--accent)} .tswitch input:checked+.knob::after{transform:translateX(13px);background:#fff}
+  /* Billing: the four one-click top-up amounts. Each card IS the buy button - no dropdown. */
+  .fundgrid{display:grid;grid-template-columns:repeat(4,minmax(86px,1fr));gap:8px;max-width:460px}
+  .fundcard{background:var(--panel2);border:1px solid var(--line);border-radius:var(--rb);padding:13px 8px 11px;text-align:center;cursor:pointer;color:var(--ink);font-family:var(--mono);transition:border-color .12s,transform .12s}
+  .fundcard:hover:not(:disabled){border-color:var(--accent);transform:translateY(-1px)}
+  .fundcard:disabled{opacity:.55;cursor:default}
+  .fundcard b{display:block;font-size:17px;letter-spacing:-.3px}
+  .fundcard span{display:block;font-size:10.5px;color:var(--muted);margin-top:3px}
+  @media(max-width:520px){.fundgrid{grid-template-columns:repeat(2,1fr)}}
   /* a switch-option card: knob + [title / caption], vertically centered on the title line */
   .cliopt{display:flex;align-items:flex-start;gap:10px;margin:12px 0;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);cursor:pointer}
   .cliopt .tswitch{margin-top:1px} .cliopt b{font-size:12.5px;line-height:1.4} .cliopt .sub{font-size:11px;line-height:1.5;margin:0}
@@ -2255,47 +2263,53 @@ a:hover{text-decoration-color:var(--muted)}
             <template v-if="canAdmin && orgTab==='billing'">
               <div v-if="billing" style="margin-top:4px">
                 <div class="card" style="padding:16px">
-                  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap">
-                    <div>
-                      <div class="lbl">Balance</div>
-                      <div style="font-size:28px;font-weight:700;color:var(--accent);font-family:var(--mono)">{{money(billing.balance_micro)}}</div>
-                      <p class="sub" style="margin:4px 0 0">Prepaid credit. Calls draw from it - <code>treg balance</code> shows the ledger.</p>
-                    </div>
-                    <div v-if="billing.configured" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-                      <select class="msel" v-model.number="topupAmount">
-                        <option v-for="p in billing.topup.presets" :key="p" :value="p">${{p}}</option>
-                      </select>
-                      <button class="btn primary" :disabled="billingBusy" @click="addFunds()">{{billingBusy?'Opening Stripe…':'Add funds'}}</button>
-                    </div>
+                  <div>
+                    <div class="lbl">Balance</div>
+                    <div style="font-size:28px;font-weight:700;color:var(--accent);font-family:var(--mono)">{{money(billing.balance_micro)}}</div>
+                    <p class="sub" style="margin:4px 0 0">Prepaid credit. Calls draw from it - <code>treg balance</code> shows the ledger.</p>
                   </div>
                   <p v-if="!billing.configured" class="sub" style="margin:12px 0 0">Top-ups aren't configured on this deployment.</p>
 
                   <template v-if="billing.configured">
+                    <div style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px">
+                      <div class="lbl">Add funds</div>
+                      <div class="fundgrid" style="margin-top:8px">
+                        <button v-for="p in billing.topup.presets" :key="p" class="fundcard" :disabled="billingBusy" @click="addFunds(p)">
+                          <b>${{p}}</b>
+                          <span>{{billingBusy&&topupAmount===p?'Opening Stripe…':'one-time'}}</span>
+                        </button>
+                      </div>
+                    </div>
+
                     <div v-if="billing.autotopup.disabled_reason" class="banner" style="margin:14px 0 0">
                       Auto top-up switched itself off ({{billing.autotopup.disabled_reason}}). Once the balance runs out, calls will fail until it's funded.
                     </div>
                     <div style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px">
-                      <div class="lbl">Auto top-up</div>
-                      <p class="sub" style="margin:4px 0 10px">
-                        <template v-if="billing.autotopup.enabled">On - we add {{money(billing.autotopup.amount_micro)}} whenever the balance drops below {{money(billing.autotopup.threshold_micro)}}. This month: {{money(billing.autotopup.month_spend_micro)}} of {{money(billing.autotopup.monthly_cap_micro)}}.</template>
-                        <template v-else>Off - keep agents running without watching the balance. We charge your saved card only when it dips below your threshold, never more than your monthly cap.</template>
-                      </p>
-                      <div v-if="!billing.autotopup.enabled" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-                        <span class="sub">Add</span>
-                        <input class="msel" style="width:76px" type="number" min="5" v-model.number="autoAmount"/>
-                        <span class="sub">when it drops below</span>
-                        <input class="msel" style="width:76px" type="number" min="5" v-model.number="autoThreshold"/>
-                      </div>
-                      <label v-if="!billing.autotopup.enabled" style="display:flex;gap:8px;align-items:flex-start;margin-top:10px;cursor:pointer">
-                        <input type="checkbox" v-model="autoConsent" style="margin-top:3px"/>
-                        <!-- The mandate text. Not decoration: an off-session charge with no recorded
-                             agreement to THESE numbers is an unauthorized charge under PSD2/SCA. -->
-                        <span class="sub">I authorize treg to charge my saved card ${{autoAmount}} automatically whenever my balance drops below ${{autoThreshold}}, up to {{money(billing.autotopup.monthly_cap_micro)}} per month. Cancel any time.</span>
+                      <label style="display:flex;gap:10px;align-items:center;cursor:pointer">
+                        <span class="tswitch"><input type="checkbox" :checked="billing.autotopup.enabled||autoOpen" :disabled="billingBusy" @change="autoToggled"/><span class="knob"></span></span>
+                        <span class="lbl" style="margin:0">Auto top-up</span>
+                        <span v-if="billing.card_on_file" class="sub" style="margin-left:auto">Card on file ✓</span>
                       </label>
-                      <div style="margin-top:10px">
-                        <button v-if="!billing.autotopup.enabled" class="btn" :disabled="!autoConsent||billingBusy" @click="setAuto(true)">Turn on auto top-up</button>
-                        <button v-else class="btn danger" :disabled="billingBusy" @click="setAuto(false)">Turn off auto top-up</button>
-                        <span v-if="billing.card_on_file" class="sub" style="margin-left:10px">Card on file ✓</span>
+                      <p class="sub" style="margin:8px 0 0">
+                        <template v-if="billing.autotopup.enabled">On - we add {{money(billing.autotopup.amount_micro)}} whenever the balance drops below {{money(billing.autotopup.threshold_micro)}}. This month: {{money(billing.autotopup.month_spend_micro)}} of {{money(billing.autotopup.monthly_cap_micro)}}.</template>
+                        <template v-else>Keep agents running without watching the balance. We charge your saved card only when it dips below your threshold, never more than your monthly cap.</template>
+                      </p>
+                      <div v-if="!billing.autotopup.enabled && autoOpen" style="margin-top:12px;background:var(--panel2);border:1px solid var(--line);border-radius:var(--rb);padding:12px 14px;max-width:560px">
+                        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                          <span class="sub" style="margin:0">Add $</span>
+                          <input class="msel" style="width:70px" type="number" min="5" v-model.number="autoAmount"/>
+                          <span class="sub" style="margin:0">when the balance drops below $</span>
+                          <input class="msel" style="width:70px" type="number" min="5" v-model.number="autoThreshold"/>
+                        </div>
+                        <label style="display:flex;gap:8px;align-items:flex-start;margin-top:12px;cursor:pointer">
+                          <input type="checkbox" v-model="autoConsent" style="margin-top:3px"/>
+                          <!-- The mandate text. Not decoration: an off-session charge with no recorded
+                               agreement to THESE numbers is an unauthorized charge under PSD2/SCA. -->
+                          <span class="sub" style="margin:0">I authorize treg to charge my saved card ${{autoAmount}} automatically whenever my balance drops below ${{autoThreshold}}, up to {{money(billing.autotopup.monthly_cap_micro)}} per month. Cancel any time.</span>
+                        </label>
+                        <div style="margin-top:12px">
+                          <button class="btn primary" :disabled="!autoConsent||billingBusy" @click="setAuto(true)">{{billingBusy?'…':'Turn on auto top-up'}}</button>
+                        </div>
                       </div>
                     </div>
                   </template>
@@ -3305,7 +3319,7 @@ createApp({
       usage:null, usageDays:30, myUsage:null,  // usage-metering: rollups + the member's own used/cap
       // Billing (Stripe top-ups). `billing` null = not loaded / not an admin; billing.configured
       // false = this deployment sells no balance, so the whole block stays hidden.
-      billing:null, billingBusy:false, topupAmount:10, autoAmount:10, autoThreshold:5, autoConsent:false,
+      billing:null, billingBusy:false, topupAmount:10, autoAmount:10, autoThreshold:5, autoConsent:false, autoOpen:false,
       confirmDel:'', confirmLeave:false, confirmRemove:null,
       showJoin:false, joinCode:'', joinBusy:false, joinErr:'',
       secrets:[], showSecrets:false, secretRows:[{name:'',value:'',kind:'env'}], secretBusy:false, secretErr:'', runNote:'',
@@ -4186,23 +4200,28 @@ createApp({
       if(a%10000===0) return s+'$'+(a/1e6).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
       return s+'$'+(a/1e6).toFixed(6).replace(/0+$/,''); },
     async loadBilling(){ if(!this.canAdmin || !this.activeOrgId){ this.billing=null; return; }
+      this.autoOpen=false; this.autoConsent=false;
       this.billing=await this.api('/billing').catch(()=>null);
       if(this.billing){ this.topupAmount=this.billing.topup.default_usd;
         this.autoAmount=Math.round(this.billing.autotopup.amount_usd);
         this.autoThreshold=Math.round(this.billing.autotopup.threshold_usd); } },
-    async addFunds(){ this.billingBusy=true; this.err='';
-      try{ const out=await this.api('/billing/topup',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({amount_usd:this.topupAmount})});
+    async addFunds(amount){ this.billingBusy=true; this.topupAmount=amount; this.err='';
+      try{ const out=await this.api('/billing/topup',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({amount_usd:amount})});
         // Stripe's own hosted page does the payment; the balance moves when its webhook lands, never
         // on the return redirect (which a payer could simply type). Same tab, so the return lands here.
         window.location.href=out.url; }
       catch(e){ this.err='Could not start the payment: '+(e.detail||e.status); this.billingBusy=false; } },
+    // The toggle itself never arms auto top-up - it can only DISARM (off is safe) or open the
+    // settings panel; arming still goes through the consent checkbox + confirm button below.
+    autoToggled(){ if(this.billing.autotopup.enabled){ this.setAuto(false); return; }
+      this.autoOpen=!this.autoOpen; if(!this.autoOpen) this.autoConsent=false; },
     async setAuto(on){ this.billingBusy=true; this.err='';
       try{ const out=await this.api('/billing/autotopup',{method:'POST',headers:{'content-type':'application/json'},
              body:JSON.stringify({enabled:on, consent:on, amount_usd:on?this.autoAmount:null, threshold_usd:on?this.autoThreshold:null})});
         // No card yet: consent is stored, and Stripe's hosted card page finishes the job. Auto top-up
         // arms itself from the setup_intent.succeeded webhook, so there's nothing more to click here.
         if(out.setup_url){ window.location.href=out.setup_url; return; }
-        this.billing=out; this.autoConsent=false; }
+        this.billing=out; this.autoConsent=false; this.autoOpen=false; }
       catch(e){ this.err='Auto top-up change failed: '+(e.detail||e.status); }
       this.billingBusy=false; },
     async loadMyUsage(){ if(!this.activeOrgId){ this.myUsage=null; return; }
