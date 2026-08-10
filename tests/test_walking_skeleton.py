@@ -92,7 +92,7 @@ async def test_dashboard_served_at_root(clients: AsyncClient):
     r = await clients.get("/app")
     assert r.status_code == 200
     # the app root div may carry extra attributes (e.g. v-cloak) — match the id, not the exact tag
-    assert "tools-registry" in r.text and 'id="app"' in r.text
+    assert "treg" in r.text and 'id="app"' in r.text
     # deep links (invite flows etc.) carry query params and still reach the SPA at /
     r = await clients.get("/?invite=x%40y.z")
     assert r.status_code == 200 and 'id="app"' in r.text

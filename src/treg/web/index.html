@@ -1884,7 +1884,7 @@ a:hover{text-decoration-color:var(--muted)}
 <span class="hl-cmd">treg</span> upload <span class="hl-flag">--all</span></pre></div>
             </template>
             <template v-else>
-              <p class="sub" style="margin:0 0 8px">Paste into Claude Code / Codex / Gemini — it installs the CLI, signs in, and registers your skills + keys (with a read-only scan you approve first).</p>
+              <p class="sub" style="margin:0 0 8px">One line, token included — your agent reads llms.txt, installs the CLI, signs in, and registers your skills + keys (read-only scan first, you approve).</p>
               <div class="lc-codewrap"><button class="lc-cp" @click="copyAgentGuide('agent')">{{agentRowCopied==='agent'?'✓ copied':'copy'}}</button><pre style="max-height:220px;overflow:auto">{{buildAgentPrompt('agent', true)}}</pre></div>
             </template>
           </div>
@@ -2052,7 +2052,7 @@ a:hover{text-decoration-color:var(--muted)}
 <span class="hl-cmd">treg</span> upload <span class="hl-flag">--all</span></pre></div>
             </template>
             <template v-else>
-              <p class="sub" style="margin:0 0 8px">Paste into Claude Code / Codex / Gemini — it installs the CLI, signs in, and registers your skills + keys (with a read-only scan you approve first).</p>
+              <p class="sub" style="margin:0 0 8px">One line, token included — your agent reads llms.txt, installs the CLI, signs in, and registers your skills + keys (read-only scan first, you approve).</p>
               <div class="lc-codewrap"><button class="lc-cp" @click="copyAgentGuide('agent')">{{agentRowCopied==='agent'?'✓ copied':'copy'}}</button><pre style="max-height:220px;overflow:auto">{{buildAgentPrompt('agent', true)}}</pre></div>
             </template>
           </div>
@@ -2577,7 +2577,7 @@ a:hover{text-decoration-color:var(--muted)}
             <p class="sub">~2,600 catalogued endpoints: SEO and backlinks, social and trends, people and company enrichment, ads. Find one by what it <i>does</i>, see its price, call it — no provider signup. Your team's <b>$1.00 free credit</b> covers hundreds of calls.</p>
 
             <div class="lbl" style="margin-top:16px">▸ Set up with your agent <span class="muted" style="font-weight:400">— paste &amp; go</span></div>
-            <p class="sub">It installs the CLI, signs in as you, reads the treg skill, then finds the catalog tools that fit this project and shows you each price before spending anything.</p>
+            <p class="sub">One line, token included — your agent reads llms.txt and does the rest: installs the CLI, signs in as you, and makes its first call.</p>
             <div class="lc-codewrap" style="margin-top:8px"><button class="lc-cp" @click="copyAgentGuide('agent')">{{agentRowCopied==='agent'?'✓ copied':'copy'}}</button><pre style="max-height:240px;overflow:auto">{{buildAgentPrompt('agent', true)}}</pre></div>
 
             <div class="lbl" style="margin-top:26px">▸ Or set it up manually</div>
@@ -2601,7 +2601,7 @@ a:hover{text-decoration-color:var(--muted)}
             <p class="sub">Share your skills &amp; API keys with the team — your <span class="mono">.env</span> keys and skill folders become tools every teammate's agent can call, without the key ever leaving the server.</p>
 
             <div class="lbl" style="margin-top:16px">▸ Set up with your agent <span class="muted" style="font-weight:400">— paste &amp; go</span></div>
-            <p class="sub">Paste into Claude Code / Codex / Gemini. It installs the CLI, signs in, and registers your local skills + keys as shared tools (with a read-only scan you approve first).</p>
+            <p class="sub">One line, token included — your agent reads llms.txt, installs the CLI, signs in as you, and can register your local skills + keys as shared tools (read-only scan first, you approve).</p>
             <div class="lc-codewrap" style="margin-top:8px"><button class="lc-cp" @click="copyAgentGuide('agent')">{{agentRowCopied==='agent'?'✓ copied':'copy'}}</button><pre style="max-height:240px;overflow:auto">{{buildAgentPrompt('agent', true)}}</pre></div>
 
             <div class="lbl" style="margin-top:26px">▸ Or set it up manually</div>
@@ -3088,7 +3088,7 @@ a:hover{text-decoration-color:var(--muted)}
     <div class="scrim" role="dialog" aria-modal="true" v-if="agentGuide" @click.self="agentGuide=null">
       <div class="modal" style="width:min(680px,95vw)"><div class="hd"><b>{{agentGuide==='admin'?'Sync your skills &amp; secrets':'Use your team’s shared tools'}}</b><button class="btn sm ico" @click="agentGuide=null" aria-label="Close">✕</button></div>
         <div style="padding:16px 18px">
-          <p class="explain">Paste this into your coding agent (Claude Code / Codex / Gemini). <template v-if="agentGuide==='admin'">It installs the CLI, signs in, and registers your local skills + API keys as shared tools — with a read-only scan you approve first.</template><template v-else>It installs the CLI, signs you in, pulls the team’s shared skills, and makes a test call. No API keys land on your machine.</template></p>
+          <p class="explain">Paste this into your coding agent (Claude Code / Codex / Gemini). One line — the agent reads llms.txt and does the rest: installs the CLI, signs in as you, and makes its first call. No API keys land on your machine.</p>
           <label style="display:flex;gap:8px;align-items:center;margin:0 0 10px;font-size:12.5px;cursor:pointer;color:var(--ink)"><input type="checkbox" v-model="agentInclToken" :disabled="!myToken"/> Embed my token <span class="muted" v-if="agentInclToken&&myToken">— paste-and-run; for your own machine, don’t share this text</span><span class="muted" v-else-if="!myToken">— no token available; the agent will sign you in</span><span class="muted" v-else>— placeholder; safe to share</span></label>
           <pre class="code" style="white-space:pre-wrap;max-height:44vh;overflow:auto">{{agentPromptText}}</pre>
           <div style="margin-top:12px;display:flex;gap:10px;align-items:center"><button class="btn primary" @click="copyAgentPrompt">⧉ {{agentGuideCopied?'Copied!':'Copy'}}</button></div>
@@ -3654,7 +3654,7 @@ createApp({
     ]; },
     welcomeAgent(){ return this.welcomeAgents.concat(this.welcomeMoreAgents).find(a=>a.id===this.welcome.agent) || this.welcomeAgents[0]; },
     welcomeIsMore(){ return this.welcomeMoreAgents.some(a=>a.id===this.welcome.agent); },
-    welcomeSetupCmd(){ return 'set up treg — '+this.proxy+'/llms.txt'; },
+    welcomeSetupCmd(){ return this.buildAgentPrompt('agent', true); },
     tryExamples(){ return [
       {k:'enr',  cat:'Get contact emails',      logo:'people', avatar:'https://pbs.twimg.com/profile_images/1131851609774985216/OcsssQ9J_400x400.png', prompt:'Use treg to find the work email of OpenClaw\'s creator'},
       {k:'trend',cat:'Trending videos pattern', logo:'tiktok',  prompt:'Use treg to pull today\'s top trending TikTok videos and tell me the patterns worth copying.'},
@@ -4641,34 +4641,10 @@ createApp({
     // skill install.sh installs, and in llms.txt. A prompt can only carry what a FILE cannot: the
     // token, the team, permission to run things, and "do it now". `kind` is ignored (call sites keep
     // their argument) so there is a single text to keep true.
-    buildAgentPrompt(kind, inclToken){
+    buildAgentPrompt(kind, inclToken){  // ONE line — llms.txt carries the whole setup flow
       const B=this.proxy, S=this.activeSlugNow||'<team-slug>';
       const T=(inclToken && this.myToken) ? this.myToken : '<YOUR_TOKEN>';
-      return [
-        `Set up treg for me. I authorize every \`treg\` command — if your runtime asks permission for`,
-        `shell commands, request \`treg\` ONCE as a whole and then work straight through; do not stop`,
-        `between steps. (Spending my balance is the one exception: tell me a price before you spend it.)`,``,
-        `1. Install the CLI (this also installs the treg skill, which teaches you how it works):`,
-        `   curl -fsSL ${B}/install.sh | sh`,``,
-        `2. Sign in as me and select my team:`,
-        `   treg login --token ${T}`,
-        `   treg org use ${S}`,``,
-        `3. Read the treg skill you just installed (or ${B}/skill.md) — it covers searching the`,
-        `   catalog, reading a price before you spend, and calling a tool with no key.`,``,
-        `4. Look at what this project actually does, then find the 2-3 catalog tools that would help`,
-        `   it most. Show me each with its price (\`treg catalog get <id>\`), call one once I say yes,`,
-        `   and then run \`treg balance\` so I can see exactly what it cost. Our team starts with`,
-        `   $1.00 of free credit, and most calls are a fraction of a cent.`,``,
-        `5. Afterwards, if I have API keys or skills worth sharing with my team, offer to register`,
-        `   them: \`treg scan\` first (read-only), show me the plan, and upload only what I approve.`,
-        `   Prefer \`treg upload\` / \`treg secret add --env-var\` — they read values internally, so a`,
-        `   secret never lands on the command line.`,``,
-        `6. Once a call has returned real data, ask whether I would like to star the project:`,
-        `       gh api -X PUT user/starred/superdesigndev/tools-registry`,
-        `   (no \`gh\`? just open https://github.com/superdesigndev/tools-registry and I will click it.)`,``,
-        `Goal: this project can use real data through treg in minutes — from the catalog with no keys`,
-        `of its own, and from my team's keys without either of us holding them.`
-      ].join('\n');
+      return `set up treg — ${B}/llms.txt with token ${T}, team ${S}`;
     },
     async copyAgentPrompt(){ if(!(await this.toClipboard(this.agentPromptText))) return; this.agentGuideCopied=true; setTimeout(()=>this.agentGuideCopied=false,1500); },
     async copyAgentGuide(kind){ if(!(await this.toClipboard(this.buildAgentPrompt(kind, true)))) return; this.agentRowCopied=kind; setTimeout(()=>{ if(this.agentRowCopied===kind) this.agentRowCopied=null; },1500); },

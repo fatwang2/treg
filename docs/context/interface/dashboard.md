@@ -179,7 +179,7 @@ specific org — token bakes the org in; a session picks it via `X-Treg-Org`), a
   two numbered **step cards** (`.start-card`):
   **① Set up your \<agent\>** — an agent dropdown (`startAgentOpen`, shares `welcome.agent` +
   `welcomeAgents`/`welcomeMoreAgents` with the first-run modal; "Docs" links `/tutorial`) above the
-  per-agent setup line (`welcomeSetupCmd` — `set up treg — <proxy>/llms.txt`) and, combined into the
+  per-agent setup line (`welcomeSetupCmd` = `buildAgentPrompt` — `set up treg — <proxy>/llms.txt with token <T>, team <slug>`; the long multi-step agent prompt is retired, llms.txt itself now carries the setup flow, the do-not-stop authorization framing and the star ask, and its money rules no longer demand per-call price confirmation) and, combined into the
   same card, **Your API key** (`myToken`, masked with a `startTokenShow` reveal + copy — the key
   already exists, so there is no "create key" step). **② Try it out** — four copyable example
   prompts (`tryExamples`, category-labeled `.try-card`s: Social/Trends/SEO/Enrichment — concrete
@@ -207,8 +207,7 @@ specific org — token bakes the org in; a session picks it via `X-Treg-Org`), a
   modal**: an **agent picker** (`welcome.step===1` — OpenClaw / Hermes Agent / Claude.ai / Claude Code /
   Codex, plus a "More" expander with opencode / pi / Cursor / Gemini CLI / Other; LobeHub icons via
   unpkg, theme-aware light/dark variants through `agentIcon`) with Skip/Next, then the **setup line**
-  (`step===2` — "In your agent's chat, send: `set up treg — <proxy>/llms.txt`", `welcomeSetupCmd`, copy
-  button) with Back/Done. Skip and Done both call `welcomeFinish` → close + `go('connections')`.
+  (`step===2` — "In your agent's chat, send:" + `welcomeSetupCmd`, copy button) with Back/Done. Skip and Done both call `welcomeFinish` → close + `go('connections')`.
   **Exception —
   an invited user**: `maybeOnboard` checks `pendingInvites` first and, if any, shows a **multi-select
   accept-invite modal** (`inviteChoice` / `openInviteChoice` seeds `inviteSel` with ALL invites checked;
