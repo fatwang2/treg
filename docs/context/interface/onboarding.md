@@ -132,7 +132,7 @@ now is a **three-step welcome modal**: boot reads `onboarded` from `/auth/me`; `
 only for a non-onboarded session with **no team yet**. Step 0 names the team (`welcomeCreate` → `POST /orgs`,
 marks onboarded via `/onboard/skip`); step 1 asks **which agent you're using** (picker with LobeHub icons,
 skippable); step 2 shows the per-agent **setup line** (`set up treg — <proxy>/llms.txt with token <T>, team <slug>` — the ONE agent instruction everywhere). Finishing (or
-skipping) lands on **`#connections`** — also the default view for ANY signed-in arrival at `/app` with no
-deep link or hash. `/onboard/seed-tool` and
+skipping) lands on **`#start`** (Getting started) — also the default view for ANY signed-in arrival at
+`/app` with no deep link or hash. `/onboard/seed-tool` and
 `/onboard/accept-teammate` no longer have a dashboard caller (the CLI/demo paths don't use them either);
 **"Remove demo"** (`resetDemo` → `/onboard/reset`) remains in Help. A clay **`demo` chip** marks a demo org.

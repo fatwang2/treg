@@ -4549,7 +4549,7 @@ createApp({
         this.welcome.step=1; }  // stay in the modal: pick your agent → get the setup line
       catch(e){ this.welcome.err='Could not create the team: '+(e.detail||e.status); }
       finally{ this.welcome.busy=false; } },
-    welcomeFinish(){ this.welcome.on=false; this.go('connections');
+    welcomeFinish(){ this.welcome.on=false; this.go('start');
       this.orgMsg='Team created. Send your agent the setup line any time — it lives on Getting started.'; },
     agentIcon(icon){ return 'https://unpkg.com/@lobehub/icons-static-png@latest/'+(this.theme==='dark'?'dark':'light')+'/'+icon+'.png'; },
     async resetDemo(){ try{ await this.api('/onboard/reset',{method:'POST'}); this.onboarded=true; await this.loadAll(); this.orgMsg='Demo teammates removed.'; }
@@ -5331,13 +5331,13 @@ createApp({
         if(!landed && inv && this.me && inv.toLowerCase()!==this.me.toLowerCase())
           this.detailNote='This share link was sent to '+inv+' — you’re signed in as '+this.me+'. Sign out (⏻) and sign in with that email to accept the invite.'; }
       else { const hv=this.viewFromHash(); if(hv) this.go(hv, true);
-        else { this.go('connections', true); history.replaceState({view:'connections'},'','/app#connections'); } }  // no deep link → the marketplace is the default landing
+        else { this.go('start', true); history.replaceState({view:'start'},'','/app#start'); } }  // no deep link → Getting started is the default landing
       return; }  // GitHub/email session
     if(this.token){ await this.loadAll();
       const pfTok=this.platformFromHash();
       if(mkRoute) this.openProvider(mkRoute, true); else if(pfTok) this.openPlatform(pfTok, true); else if(route) this.openDetail(route.kind, route.name, true);
       else { const hv=this.viewFromHash(); if(hv) this.go(hv, true);
-        else { this.go('connections', true); history.replaceState({view:'connections'},'','/app#connections'); } }
+        else { this.go('start', true); history.replaceState({view:'start'},'','/app#start'); } }
       return; }      // token-in-browser fallback
     // A marketplace link is only meaningful to a member, so a logged-out visitor gets the front
     // door rather than the share gate (which exists to accept skill/tool shares).

@@ -207,7 +207,7 @@ specific org — token bakes the org in; a session picks it via `X-Treg-Org`), a
   modal**: an **agent picker** (`welcome.step===1` — OpenClaw / Hermes Agent / Claude.ai / Claude Code /
   Codex, plus a "More" expander with opencode / pi / Cursor / Gemini CLI / Other; LobeHub icons via
   unpkg, theme-aware light/dark variants through `agentIcon`) with Skip/Next, then the **setup line**
-  (`step===2` — "In your agent's chat, send:" + `welcomeSetupCmd`, copy button) with Back/Done. Skip and Done both call `welcomeFinish` → close + `go('connections')`.
+  (`step===2` — "In your agent's chat, send:" + `welcomeSetupCmd`, copy button) with Back/Done. Skip and Done both call `welcomeFinish` → close + `go('start')` (Getting started, also the default landing for any signed-in arrival with no deep link/hash).
   **Exception —
   an invited user**: `maybeOnboard` checks `pendingInvites` first and, if any, shows a **multi-select
   accept-invite modal** (`inviteChoice` / `openInviteChoice` seeds `inviteSel` with ALL invites checked;
