@@ -348,7 +348,7 @@ Example (an agent calling Intercom with no key on its box):
   [Team access control]({BASE}/tutorial-access.md) - which tools each member may use + the
   local-run on/off dial.
 - [The official Claude skill]({BASE}/skill.md): the 3-persona (consumer/creator/admin) skill —
-  save it to `~/.claude/skills/tools-registry/SKILL.md` (install.sh does this automatically).
+  save it to `~/.claude/skills/treg/SKILL.md` (install.sh does this automatically).
 - [Web dashboard]({BASE}/): sign in and manage everything in the browser (tools, secrets,
   invites, Try-it, activity, admin). It also has a guided first-run and a screenshot tour.
 - [README](https://github.com/superdesigndev/tools-registry/blob/main/README.md): overview,

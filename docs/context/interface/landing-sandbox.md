@@ -142,7 +142,7 @@ files a skill folder is — `SKILL.md` (agent recipe: call the treg proxy, key i
 `pip3 install --user --upgrade`, then runs `treg config --base-url {BASE}`. It also installs the official
 **tools-registry skill** into every detected agent via `treg skill bootstrap` (Claude Code, Cursor, Codex,
 Gemini, Copilot, OpenCode, Windsurf …), falling back on older CLIs to a Claude-only drop that curls
-`{BASE}/skill.md` into `~/.claude/skills/tools-registry`. Because the package is public on PyPI,
+`{BASE}/skill.md` into `~/.claude/skills/treg`. Because the package is public on PyPI,
 `curl … /install.sh | sh` now works for anyone with no repo/git access needed. The **Getting started**
 dashboard view (`view==='start'`) surfaces this install command + `treg login`/`onboard`/`add`/`call` and
 links to the tutorial and `/llms.txt`; `llms.txt` has a matching **Install the CLI** section.

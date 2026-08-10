@@ -26,7 +26,7 @@ One skill, three personas:
 
 **Distribution:** the file is `{BASE}`-templated and served at **`GET /skill.md`** (`skill_md` in
 `api.py`, via `_serve_md`), and `install.sh` best-effort drops it into
-`~/.claude/skills/tools-registry/SKILL.md` right after installing the CLI — so `curl {BASE}/install.sh | sh`
+`~/.claude/skills/treg/SKILL.md` right after installing the CLI — so `curl {BASE}/install.sh | sh`
 gives a machine both the `treg` command AND the skill that teaches an agent to use it. It restates the
 invariants (secrets are write-only, use-without-hold, the proxy relays the upstream's truth) and links
 `{BASE}/llms.txt` + `{BASE}/tutorial`. It mirrors the surfaces in [api.md](api.md) + [cli.md](cli.md);

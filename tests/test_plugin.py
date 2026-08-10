@@ -20,7 +20,7 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 PLUGIN = ROOT / "plugin"
 MANIFEST = PLUGIN / ".codex-plugin" / "plugin.json"
-SKILL = PLUGIN / "skills" / "tools-registry" / "SKILL.md"
+SKILL = PLUGIN / "skills" / "treg" / "SKILL.md"
 
 
 @pytest.fixture(scope="module")

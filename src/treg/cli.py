@@ -3328,7 +3328,7 @@ def cmd_skill_install(args, cfg) -> None:
 
 
 def cmd_skill_bootstrap(args, cfg) -> None:
-    """Fetch the official tools-registry skill from the server and drop it into every detected agent's
+    """Fetch the official treg skill from the server and drop it into every detected agent's
     skills dir, so whatever agent the user runs already knows how to use treg. install.sh calls this
     right after installing the CLI; it's also runnable by hand. Global (per-user) scope by default —
     it runs outside any project — with `--project` to target repo-local dirs instead."""
@@ -3344,10 +3344,19 @@ def cmd_skill_bootstrap(args, cfg) -> None:
     bases = _agents.resolve_targets(scope_global=not args.project, all_agents=args.all_agents)
     n = 0
     for b in bases:
-        dest = b / "tools-registry"
+        dest = b / "treg"
         dest.mkdir(parents=True, exist_ok=True)
         (dest / "SKILL.md").write_text(recipe)
-        print(f"  ✓ tools-registry → {dest / 'SKILL.md'}"); n += 1
+        print(f"  ✓ treg → {dest / 'SKILL.md'}"); n += 1
+        # the skill used to install as "tools-registry"; a leftover copy would load as a duplicate
+        # skill and confuse agents, so retire it — but only if it's exactly ours (just a SKILL.md).
+        legacy = b / "tools-registry"
+        try:
+            if legacy.is_dir() and [q.name for q in legacy.iterdir()] == ["SKILL.md"]:
+                (legacy / "SKILL.md").unlink(); legacy.rmdir()
+                print(f"    (removed the old tools-registry skill folder — renamed to treg)")
+        except OSError:
+            pass
     detected = _agents.detect_installed()
     tail = f"detected: {', '.join(detected)}" if detected else "no agents detected — used sensible defaults"
     print(f"\nInstalled the treg skill into {n} location(s)  ({tail}).")

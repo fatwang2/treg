@@ -1415,8 +1415,8 @@ async def tutorial_access_md():
 
 @app.get("/skill.md", include_in_schema=False)
 async def skill_md():
-    """The OFFICIAL tools-registry Claude skill (3 personas), {BASE}-templated to this server.
-    install.sh drops it into ~/.claude/skills/tools-registry/ so agents learn treg at CLI install."""
+    """The OFFICIAL treg Claude skill (3 personas), {BASE}-templated to this server.
+    install.sh drops it into ~/.claude/skills/treg/ so agents learn treg at CLI install."""
     return _serve_md("skill.md")
 
 

@@ -1,5 +1,5 @@
 ---
-name: tools-registry
+name: treg
 description: Call the tool you need for a task without owning its API key. (1) THE CATALOG — ~2,600 curated endpoints across ~40 providers (SEO/SERP, backlinks, social & trends, people/company enrichment, ads, scraping); most need no key at all and cost fractions of a cent from the team's prepaid balance. Search by what you want to DO, not by vendor. (2) YOUR OWN TOOLS — the team's registered keys, OAuth connections, vendor CLIs and skills, callable without holding the credential. Use when you need data or an API and have no key locally, when a task needs a paid provider (backlinks, keyword volume, work emails, ad creative, social data), or when working with the `treg` command.
 ---
 

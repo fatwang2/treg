@@ -31,15 +31,15 @@ fi
 # point the CLI at this server (falls back silently on older CLIs)
 treg config --base-url "$BASE" >/dev/null 2>&1 || true
 
-# install the official tools-registry skill into every detected agent so it knows how to use treg.
+# install the official treg skill into every detected agent so it knows how to use treg.
 # `treg skill bootstrap` fans out across all supported agents (Claude Code, Cursor, Codex, Gemini,
 # Copilot, OpenCode, Windsurf, …). Fall back to the Claude-only drop for older CLIs without it.
 if treg skill bootstrap 2>/dev/null; then
   :
 else
-  SKILL_DIR="$HOME/.claude/skills/tools-registry"
+  SKILL_DIR="$HOME/.claude/skills/treg"
   if mkdir -p "$SKILL_DIR" 2>/dev/null && curl -fsSL "$BASE/skill.md" -o "$SKILL_DIR/SKILL.md" 2>/dev/null; then
-    printf '\033[32m✓\033[0m Installed the \033[1mtools-registry\033[0m skill for Claude Code (%s)\n' "$SKILL_DIR"
+    printf '\033[32m✓\033[0m Installed the \033[1mtreg\033[0m skill for Claude Code (%s)\n' "$SKILL_DIR"
   fi
 fi
 

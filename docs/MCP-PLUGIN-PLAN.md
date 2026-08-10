@@ -120,7 +120,7 @@ Phase 1 ships and can be tested end to end. Phase 2 is what the public submissio
     plugin/
     ├── .codex-plugin/plugin.json     manifest + listing copy (reuse from the archived branch)
     ├── .mcp.json                     the remote server declaration
-    ├── skills/tools-registry/        KEEP — generated from src/treg/web/skill.md
+    ├── skills/treg/                  KEEP — generated from src/treg/web/skill.md
     └── assets/                       icon + logo (already made)
 
 **Both**, exactly as OpenAI's `github` plugin ships `"skills"` and `"apps"` together. The connector

@@ -6,7 +6,7 @@ searching the plugin directory that ChatGPT and Codex share.
 
     plugin/
     ├── .codex-plugin/plugin.json     the manifest + the listing copy
-    ├── skills/tools-registry/        GENERATED — do not edit by hand
+    ├── skills/treg/        GENERATED — do not edit by hand
     └── assets/                       icon + logo (▚ in clay #e0703f)
 
 ## The skill is generated
@@ -27,7 +27,7 @@ Two things differ from the served copy, both because a plugin arrives where the 
   `treg skill bootstrap` only runs because `treg` is installed. This is the one path where the skill
   can land on a machine with no treg at all, and without it a first run ends in `command not found`.
 
-**Never edit `skills/tools-registry/SKILL.md`.** Change `src/treg/web/skill.md` and regenerate;
+**Never edit `skills/treg/SKILL.md`.** Change `src/treg/web/skill.md` and regenerate;
 `tests/test_plugin.py` fails if the two disagree.
 
 ## Testing it locally (verified with codex-cli 0.145.0)

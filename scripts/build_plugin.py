@@ -31,7 +31,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "src" / "treg" / "web" / "skill.md"
-TARGET = ROOT / "plugin" / "skills" / "tools-registry" / "SKILL.md"
+TARGET = ROOT / "plugin" / "skills" / "treg" / "SKILL.md"
 PUBLIC_BASE = "https://treg.superdesign.dev"
 
 BOOTSTRAP = """
