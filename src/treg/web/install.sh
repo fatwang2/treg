@@ -4,6 +4,20 @@
 set -e
 
 BASE="{BASE}"
+
+# Optional token for a one-shot, fully-authed setup:
+#   curl -fsSL {BASE}/install.sh | sh -s -- --token <key>      (or: TREG_TOKEN=<key> … | sh)
+# With it, this installs the CLI + skill AND signs in + registers the MCP server into every supported
+# agent, header-authed — no browser. The key bakes in the team, so nothing else is needed. Without a
+# token, it installs the CLI + skill and prints the sign-in step (the original behavior, unchanged).
+TOKEN="${TREG_TOKEN:-}"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --token) TOKEN="$2"; shift 2 ;;
+    --token=*) TOKEN="${1#--token=}"; shift ;;
+    *) shift ;;
+  esac
+done
 # Install from PyPI (fast, public, no git clone). The base package is the light CLI; the FastAPI/DB
 # server stack is the `tools-registry[server]` extra, which people who self-host install separately.
 #
@@ -43,7 +57,20 @@ else
   fi
 fi
 
-printf '\n\033[32m✓\033[0m Installed \033[1mtreg\033[0m. Next:\n'
-printf '    \033[38;5;173mtreg login\033[0m      # sign in (GitHub or email) - first login registers you\n'
-printf '    \033[38;5;173mtreg onboard\033[0m    # optional guided walkthrough\n'
-printf '\nDocs & interactive tutorial:  %s/tutorial\n\n' "$BASE"
+# One-shot authed setup when a token was passed: sign in (the key bakes in the team) and register the
+# MCP server into every supported agent, header-authed. Both are best-effort — a failure here never
+# fails the install, since the CLI + skill are already in place.
+if [ -n "$TOKEN" ]; then
+  if treg login --token "$TOKEN" >/dev/null 2>&1; then
+    printf '\033[32m✓\033[0m Signed in.\n'
+    treg mcp install 2>/dev/null || true
+  else
+    printf '\033[33m!\033[0m That token did not verify — run \033[1mtreg login\033[0m to sign in.\n'
+  fi
+  printf '\n\033[32m✓\033[0m treg is set up. Docs & tutorial:  %s/tutorial\n\n' "$BASE"
+else
+  printf '\n\033[32m✓\033[0m Installed \033[1mtreg\033[0m. Next:\n'
+  printf '    \033[38;5;173mtreg login\033[0m      # sign in (GitHub or email) - first login registers you\n'
+  printf '    \033[38;5;173mtreg mcp install\033[0m  # optional: add treg as an MCP server in your agents\n'
+  printf '\nDocs & interactive tutorial:  %s/tutorial\n\n' "$BASE"
+fi

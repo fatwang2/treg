@@ -184,3 +184,23 @@ origin check) and that consent failed intermittently on `Origin: null`.
 - **No per-provider MCP tools.** See above.
 - **No routing or failover.** treg publishes facts and calls what it is told; the agent chooses.
 - **No second copy of the enforcement rules.** Everything goes through the API's own routes.
+
+## Two ways to authenticate the MCP server: OAuth, or a header
+
+OAuth (above) is the click-to-connect path. There is also a **headless** path, and it is the default
+the installer uses: a **team-pinned token as an `Authorization: Bearer` header**. `treg mcp install`
+(`mcp_install.py`, sibling of `treg skill bootstrap`) registers the server into every supported agent
+with that header — Claude Code via its own `claude mcp add --scope user` (user-global, not the
+default project scope; it owns its format and redacts the token), Cursor and opencode via their
+documented JSON (`~/.cursor/mcp.json`, `~/.config/opencode/opencode.json`). Codex (TOML +
+`bearer_token_env_var`), Hermes (yaml) and OpenClaw are **reported, not written** — their formats
+aren't safely expressible from the light CLI (no toml writer, yaml is a server-only dep), so we print
+the exact manual step rather than a config we haven't runtime-verified.
+
+Why a header works even though treg advertises OAuth: a client only falls back to OAuth discovery on
+a **401**, and treg returns **200** for a valid header — verified against Claude Code, which
+otherwise prefers OAuth (issue #59467). The determinant is "does the server 200 a valid header," not
+"does it advertise OAuth"; AgentKey behaves the same way. The token is the dashboard's org-baked
+"API key" (see [dashboard](../interface/dashboard.md)), so it carries the team and needs no second
+header. `curl {BASE}/install.sh | sh -s -- --token <key>` runs the whole thing — install, sign in,
+`treg mcp install` — in one paste.

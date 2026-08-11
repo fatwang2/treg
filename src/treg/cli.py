@@ -3327,6 +3327,34 @@ def cmd_skill_install(args, cfg) -> None:
         print(f"  {_M}Overwrites local edits — confirm before you --force.{_R}")
 
 
+def cmd_mcp_install(args, cfg) -> None:
+    """Register the treg MCP server into every supported agent on this machine, header-authed with
+    the logged-in token (which bakes in the team, so no org to pass). The MCP sibling of
+    `treg skill bootstrap` — install.sh calls it after login, and it is runnable by hand. Needs a
+    token: run `treg login` first (or `treg login --token <key>`)."""
+    from . import mcp_install
+    token = os.environ.get("TREG_TOKEN") or cfg.get("token")
+    if not token:
+        sys.exit("no token — run `treg login` first (or `treg login --token <key>`), then retry")
+    base_url = (cfg.get("base_url") or "https://treg.superdesign.dev").rstrip("/")
+    name = getattr(args, "name", None) or "treg"
+    out = mcp_install.install_mcp(base_url=base_url, token=token, server_name=name)
+    ok = 0
+    for display, status, detail in out["results"]:
+        if status == "ok":
+            ok += 1; print(f"  ✓ {display} → {detail}")
+        elif status == "skipped":
+            print(f"  · {display} skipped — {detail}")
+        else:
+            print(f"  ✗ {display}: {detail}")
+    if not out["results"]:
+        print("  (no MCP-capable agents detected — nothing to register)")
+    for display, how in out["manual"]:
+        print(f"  ⚠ {display}: not auto-configured — {how}")
+    print(f"\nRegistered the treg MCP server ({out['mcp_url']}) into {ok} agent(s). "
+          f"Restart an agent to pick it up.")
+
+
 def cmd_skill_bootstrap(args, cfg) -> None:
     """Fetch the official treg skill from the server and drop it into every detected agent's
     skills dir, so whatever agent the user runs already knows how to use treg. install.sh calls this
@@ -5009,6 +5037,14 @@ def build_parser() -> argparse.ArgumentParser:
                      help="every known agent's dir, not just the ones detected on this machine")
     skb.add_argument("--project", action="store_true", help="write into project dirs instead of the per-user global dirs")
     skb.set_defaults(fn=cmd_skill_bootstrap)
+
+    # ---- mcp (register the treg MCP server into detected agents, header-authed) ----
+    mc = mk(sub, "mcp", "Register the treg MCP server into the coding agents on this machine.",
+            "treg mcp install").add_subparsers(dest="sub", required=True, metavar="<subcommand>")
+    mci = mk(mc, "install", "Add treg as a header-authed MCP server in every supported detected agent.",
+             "treg mcp install")
+    mci.add_argument("--name", default="treg", help="the MCP server name to register (default: treg)")
+    mci.set_defaults(fn=cmd_mcp_install)
 
     # ---- agents (which coding agents treg installs skills for) ----
     ag = mk(sub, "agents", "List the coding agents treg can install skills for (and which are detected here).",
