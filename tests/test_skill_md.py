@@ -21,3 +21,12 @@ async def test_skill_md_served_and_templated(clients):
 def test_install_sh_installs_the_skill():
     sh = (Path(api_mod.__file__).parent / "web" / "install.sh").read_text()
     assert "$BASE/skill.md" in sh and ".claude/skills/treg" in sh
+
+
+def test_install_sh_supports_the_one_shot_authed_setup():
+    """`… | sh -s -- --token <key>` (or TREG_TOKEN=) → sign in + register MCP in one go; the key
+    bakes in the team, so no org is passed. Without a token the flow is unchanged."""
+    sh = (Path(api_mod.__file__).parent / "web" / "install.sh").read_text()
+    assert "--token" in sh and "TREG_TOKEN" in sh
+    assert "treg login --token" in sh
+    assert "treg mcp install" in sh

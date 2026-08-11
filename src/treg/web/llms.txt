@@ -183,6 +183,14 @@ recognizes the catalog CLI and wires the credential, so `treg run` works with no
 Installs the `treg` command (Python 3.12+) and points it at this server. Everything below is
 also doable over raw HTTP (see the call protocol) - the CLI is just a thin client.
 
+**One-shot, fully authed (recommended when you were handed a token):**
+
+    curl -fsSL {BASE}/install.sh | sh -s -- --token <TOKEN>
+
+That installs the CLI + skill, signs in, and registers the treg MCP server into every supported agent
+(Claude Code, Cursor, opencode; others reported) — header-authed, no browser. The token bakes in the
+team, so nothing else is needed. `TREG_TOKEN=<TOKEN> …| sh` works too.
+
 ## Get a token
 
 Three human sign-in doors (email is the identity; the door just proves it):
@@ -191,15 +199,22 @@ Three human sign-in doors (email is the identity; the door just proves it):
 - **Email one-time code** - `treg login --email you@company.com` (a 6-digit code is emailed).
 - **Invite code** - `treg org join <code> --email you@company.com` (creates you + joins a team).
 
-Agents/CI use a **per-org token** directly: `treg login --token <token>`. Get one from
-`treg org create` / `treg org join` (returned once), or ask a team owner. The token goes
-in the `X-Treg-Token` header on every call. Never share the upstream key - share access.
+Agents/CI use a token directly: `treg login --token <token>`. A dashboard "API key" bakes in the
+team (so it needs no `X-Treg-Org` — it works as a bare bearer, including as an MCP `Authorization`
+header); a per-org token from `treg org create` / `treg org join` does too. Never share the upstream
+key - share access.
 
-## MCP — connect an assistant instead of copying a token
+## MCP — connect an assistant
 
-treg is also an **MCP server** at `{BASE}/mcp/`. Any client that speaks the MCP authorization spec
-— ChatGPT, Claude Code, Cursor — connects with a link and a consent screen rather than a pasted
-token. Choose **OAuth** when the client asks; there is no API-key option to look for.
+treg is also an **MCP server** at `{BASE}/mcp/`, two ways to authenticate it:
+
+- **Header (headless, no browser):** `treg mcp install` registers it into every supported agent
+  (Claude Code at user scope, Cursor, opencode) with your token as an `Authorization: Bearer` header
+  — this is what the one-shot installer above runs for you. treg 200s a valid header, so the client
+  uses it directly and never falls back to OAuth.
+- **OAuth (click to connect):** any client that speaks the MCP authorization spec — ChatGPT, Claude
+  Code, Cursor — can instead connect with a link + consent screen. Choose **OAuth** when the client
+  asks; the token is issued to the team you pick.
 
 Five tools, the same ones for every client:
 
@@ -272,6 +287,8 @@ are both supported; you do not need to pre-arrange anything with us.
       [--no-egress] [--refresh-egress]            runs under a dedicated treg-run user + egress allow-list
 
     treg skill init --dir D | skill add --dir D | skill ls | skill rm <id>
+    treg mcp install                              register treg as a header-authed MCP server in
+                                                  every supported agent (Claude Code/Cursor/opencode)
     treg skill install <name> [--all] [--dir D]   pull a shared skill's recipe into .claude/skills/
     treg scan [env|skills] [--dir D]              read-only preview: list the keys & skills upload
                                                   would register (nothing leaves the machine)
