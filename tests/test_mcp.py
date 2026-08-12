@@ -429,6 +429,9 @@ async def test_structured_content_VALIDATES_against_the_advertised_schema(client
         # tools whose error shape carries teams/hint — plus a catalog_get error path.
         for tool, args in [("catalog_search", {"query": "backlinks"}),
                            ("catalog_get", {"endpoint_id": "no.such.endpoint"}),
+                           # its example_response is an ARRAY of records, which a dict-typed field
+                           # refused server-side — the third null/shape mismatch found in the wild
+                           ("catalog_get", {"endpoint_id": "brightdata.linkedin.user.profile"}),
                            ("balance", {}),
                            ("my_tools", {})]:
             await _rpc(c, "initialize", {

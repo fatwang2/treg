@@ -132,7 +132,8 @@ class CatalogGetOut(TypedDict, total=False):
     provider: dict[str, Any] | None
     siblings: list[dict[str, Any]] | None  # other providers of the same capability, for comparison
     call_template: str | None
-    example_response: dict[str, Any] | None
+    example_response: Any                  # a dict for most endpoints, an ARRAY for providers whose
+                                           # response is a list of records (brightdata datasets)
     hints: list[str] | None
     error: str | None
     detail: str | None

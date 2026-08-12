@@ -83,6 +83,11 @@ Two independent field reports arrived the same day (issue #93 and one on X) befo
 FastMCP's own client is lenient, so nothing local ever tripped it. The suite now validates real
 `structuredContent` against the advertised schema with `jsonschema` playing the strict client.
 
+A field whose real payloads vary in shape is `Any`, not a union: `call.body` relays whatever the
+provider sent, and `catalog_get.example_response` is a dict for most endpoints but an ARRAY for
+providers whose response is a list of records (brightdata datasets) — typing it `dict` made the
+server's own outbound validation refuse the whole catalog entry.
+
 ## Responses forbid edge transforms
 
 Every `/mcp/` response carries `Cache-Control: no-store, no-transform` (the `NoTransformResponses`
