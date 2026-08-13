@@ -680,6 +680,17 @@ Five rules worth keeping:
   same). Endpoints with evidenced miss behaviour carry a `miss: {status, means}` block in their
   YAML, surfaced through `endpoint_view` — so an agent reads "404 = no match, don't retry" instead
   of treating an expected empty answer as a failure. Only annotate what the wire has demonstrated.
+
+**Retired and broken endpoints are marked, never deleted.** An endpoint verified dead upstream
+(`status: broken`) or moved by its provider (`status: retired`) keeps its YAML entry, gains a
+`status_note` (what happened, with the evidence) and a `superseded_by` (the replacement id), and
+`_parse` drops it from `endpoints` while keeping it in `by_id`. One filter is the whole feature:
+search, platform pages and the census all read `endpoints`, so the row leaves every browse surface
+at once — but a direct id lookup (`/catalog/endpoints/{id}`, `catalog_get` over MCP) still resolves,
+returning the story and the replacement. Deleting the YAML instead would turn an id an agent cached
+yesterday into an unexplained 404, which is exactly the failure that motivated this: ~90 prod errors
+through 2026-08-12 came from endpoints the July sweep had already flagged, still being served by
+search. Calls to a marked id still relay verbatim (the upstream's own answer is the truth).
 - **Below `MIN_SAMPLES` we publish the count and nothing else.** "100% from two calls" is noise
   dressed as evidence, and on a quiet endpoint a rate could expose one org's activity.
 - **Sample size is always visible**, so `100% (8)` cannot beat `99% (121)` by looking rounder.

@@ -7742,12 +7742,35 @@ def _secret_view(s: Secret) -> dict:
     return {"id": s.id, "name": s.name, "kind": s.kind, "owner": s.owner, "bundle_id": s.bundle_id}
 
 
+_VERSION_SEGMENT = re.compile(r"/v\d+(?:[._]\d+)*/?$")
+
+
+def _base_url_call_note(base_url: str) -> str | None:
+    """A one-line warning when the base URL already ends in an API-version segment.
+
+    The single most common self-inflicted call failure in prod (2026-08-12: 24 errors on one
+    Facebook tool alone) is `graph.facebook.com/v25.0/v25.0/me` — the version lives in the base
+    URL AND the caller prepends it again. The registry relays verbatim by design, so the fix is
+    to say it where every caller looks (tool listings + the moment of registration), not to
+    second-guess the path at relay time."""
+    from urllib.parse import urlsplit
+    m = _VERSION_SEGMENT.search(urlsplit(base_url).path)
+    if not m:
+        return None
+    v = m.group(0).strip("/")
+    return (f"base URL already ends in /{v} — start paths at the resource "
+            f"(use `{v}/me` → wrong: it becomes /{v}/{v}/me; right: `me`)")
+
+
 def _tool_view(t: Tool) -> dict:
     return {
         "id": t.id,
         "name": t.name,
         "owner": t.owner,
         "base_url": t.base_url,
+        # non-null only when the base URL carries an API version: the one line that prevents the
+        # doubled-version path (`/v25.0/v25.0/…`) — shown at registration and in every listing.
+        "call_note": _base_url_call_note(t.base_url),
         "host": t.host,
         "bindings": t.bindings,
         "health_check": t.health_check,

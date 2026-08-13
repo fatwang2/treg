@@ -211,7 +211,13 @@ def _parse(directory: Path) -> Catalog:
             if ep["id"] in by_id:  # first file wins; ids are unique by validator contract
                 continue
             by_id[ep["id"]] = ep
-            endpoints.append(ep)
+            # A retired/broken endpoint resolves by id (an agent holding the old id gets the story
+            # and the replacement, and a call still relays verbatim) but leaves every browse
+            # surface: search, platform pages and the census all read `endpoints`, so one filter
+            # here is the whole feature. Deleting the YAML instead would turn a cached id into an
+            # unexplained 404 — the exact failure the marker exists to prevent.
+            if not ep["status"]:
+                endpoints.append(ep)
 
     for ep in endpoints:  # a platform seen only in provider files still deserves a label
         platforms.setdefault(ep["platform"], {"label": ep["platform"], "category": "Other"})
@@ -366,6 +372,13 @@ def _normalize(raw: dict, provider: str, directory: Path) -> dict:
         # 404s a person it has no record of). Only endpoints with evidenced miss semantics carry
         # it; for everything else an error status means what it says.
         "miss": raw.get("miss") or None,
+        # "" = live (the default). "retired" (the provider moved/removed the route) or "broken"
+        # (verified dead upstream) pulls the endpoint off every browse surface while keeping it
+        # resolvable by id — see the filter in `_parse`. `status_note` says what happened and
+        # `superseded_by` names the replacement id, so the marker is a migration path, not a wall.
+        "status": str(raw.get("status") or "").strip().lower(),
+        "status_note": str(raw.get("status_note") or "").strip(),
+        "superseded_by": str(raw.get("superseded_by") or "").strip(),
         "docs_url": raw.get("docs_url") or "",
         "example_file": _example_file(raw, directory),
     }
@@ -426,6 +439,11 @@ def endpoint_view(ep: dict, provider_display: str, cat: Catalog | None = None) -
         # "no match" semantics, when the endpoint has them — an agent that reads `miss` stops
         # treating an expected empty answer as a failed call (and stops retrying it).
         "miss": ep.get("miss"),
+        # retired/broken marker (browse surfaces never serve these rows, so a non-empty value is
+        # only ever seen on a direct id lookup — where the note + replacement ARE the answer)
+        "status": ep.get("status") or None,
+        "status_note": ep.get("status_note") or None,
+        "superseded_by": ep.get("superseded_by") or None,
         "verified": ep["verified"],
         "docs_url": ep["docs_url"],
         "has_example": bool(ep["example_file"]),

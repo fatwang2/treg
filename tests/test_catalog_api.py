@@ -61,7 +61,8 @@ async def test_platform_detail_groups_the_same_job_across_providers(clients: Asy
     ep = next(e for e in profile["endpoints"] if e["provider"] == "tikhub")
     assert set(ep) == {"id", "provider", "provider_display", "name", "summary", "method", "path",
                        "scope", "tier", "kind", "domain", "call_template", "cost", "verified", "docs_url",
-                       "has_example", "input", "platform_eligible", "test_request", "miss"}
+                       "has_example", "input", "platform_eligible", "test_request", "miss",
+                       "status", "status_note", "superseded_by"}
     assert ep["kind"] == "data", "an endpoint with no explicit kind is data (the browse surface)"
     assert ep["provider_display"] == P.get("tikhub").display_name
     assert ep["method"] == "GET" and ep["path"].startswith("/")
@@ -616,3 +617,39 @@ def test_an_unpriced_route_is_still_refused():
     ep = {"cost": {"type": "per_call", "currency": "credit", "unit": "credit"},
           "provider": "pdl", "scope": "any_account", "kind": "data"}
     assert not cat.platform_eligible(ep)
+
+
+# ---- retired/broken endpoints -----------------------------------------------------------------
+RETIRED = "tikhub.x.linkedin-web-search-jobs"          # TikHub retired the web/* family
+BROKEN = "tikhub.x.tiktok-shop-web-fetch-product-reviews"   # verified dead upstream
+
+
+async def test_a_retired_endpoint_leaves_every_browse_surface(clients: AsyncClient):
+    """~90 prod errors through 2026-08-12 came from endpoints the July sweep already knew were
+    dead — because search kept serving them. A status marker must pull the row from search and
+    the platform page in one move."""
+    hits = (await clients.get("/catalog/search", params={"q": "linkedin search jobs", "limit": 100})).json()
+    assert RETIRED not in {r["id"] for r in hits["results"]}
+    # the replacement IS still served — retiring the old id must not orphan the capability
+    assert "tikhub.x.linkedin-web-v2-search-jobs" in {r["id"] for r in hits["results"]}
+
+    page = (await clients.get("/catalog/platforms/tiktok-shop", params={"include_hidden": 1})).json()
+    listed = {e["id"] for row in page["domains"] for grp in row.get("rows", [row]) for e in grp.get("endpoints", [])} if page.get("domains") else set()
+    assert BROKEN not in listed
+
+
+async def test_a_retired_id_still_resolves_with_the_story_and_the_replacement(clients: AsyncClient):
+    """An agent holding the old id from a cached answer must get a migration path, not a bare 404 —
+    that unexplained 404 is exactly the failure the marker exists to prevent."""
+    r = await clients.get(f"/catalog/endpoints/{RETIRED}")
+    assert r.status_code == 200
+    ep = r.json()["endpoint"]
+    assert ep["status"] == "retired"
+    assert "web_v2" in ep["status_note"] or "retired" in ep["status_note"]
+    assert ep["superseded_by"] == "tikhub.x.linkedin-web-v2-search-jobs"
+
+
+async def test_a_live_endpoint_carries_no_status(clients: AsyncClient):
+    r = await clients.get("/catalog/endpoints/tikhub.x.linkedin-web-v2-search-jobs")
+    assert r.status_code == 200
+    assert r.json()["endpoint"]["status"] is None

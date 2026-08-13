@@ -19292,6 +19292,9 @@ endpoints:
   example_response: examples/tikhub.x.linkedin-web-search-ads.json
   capability: linkedin.search.ads
 - id: tikhub.x.linkedin-web-search-jobs
+  status: retired
+  status_note: "TikHub retired the linkedin/web/* routes (they answer 404 — 19 recorded in prod through 2026-08-12); the web_v2 family replaced them"
+  superseded_by: tikhub.x.linkedin-web-v2-search-jobs
   tier: extended
   platform: linkedin
   method: GET
@@ -19405,6 +19408,9 @@ endpoints:
   verified: '2026-07-28'
   example_response: examples/tikhub.x.linkedin-web-search-location.json
 - id: tikhub.x.linkedin-web-search-people
+  status: retired
+  status_note: "TikHub retired the linkedin/web/* routes (they answer 404 — 14 recorded in prod through 2026-08-12); the web_v2 family replaced them"
+  superseded_by: tikhub.x.linkedin-web-v2-search-users
   tier: extended
   platform: linkedin
   method: GET
@@ -27634,6 +27640,9 @@ endpoints:
   example_response: examples/tikhub.x.tiktok-shop-web-fetch-product-detail.json
   capability: tiktok-shop.product.detail
 - id: tikhub.x.tiktok-shop-web-fetch-product-reviews
+  status: broken
+  status_note: "upstream-broken since the 2026-07-30 catalog sweep (TikHub returns 400 regardless of parameters — 37 recorded in prod through 2026-08-12); V2 works"
+  superseded_by: tikhub.x.tiktok-shop-web-fetch-product-reviews-v2
   tier: extended
   platform: tiktok-shop
   method: GET
