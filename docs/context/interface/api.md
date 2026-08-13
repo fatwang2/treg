@@ -113,8 +113,10 @@ what they created; `_require_admin_of` gates the org-admin endpoints. See
   validated by `_validate_bindings`; `host` derived by `_host_of`; optional `examples`; optional `cli`
   local-run profile validated by `_validate_cli_profile`), `list_tools`, `update_tool` (re-derives host on
   base_url change; `cli` set/clear here — this is how the local-run toggle flips `cli.enabled`),
-  `delete_tool`. View via `_tool_view` (now includes `cli`). `delete_secret` refuses a secret referenced by
-  a tool binding **or** a `cli.inject` entry.
+  `delete_tool`. View via `_tool_view` (now includes `cli`, and `call_note` — a server-computed warning
+  when the base URL already ends in an API-version segment, so a caller never composes
+  `/v25.0/v25.0/me`; shown at registration, in listings, and in MCP `my_tools`). `delete_secret`
+  refuses a secret referenced by a tool binding **or** a `cli.inject` entry.
   - **Owner-only binding.** `_validate_bindings` (HTTP bindings) and `_validate_cli_secrets` (local-run
     `cli.inject` entries) require the caller to **own** every secret they bind/inject, via
     `_require_secret_ownership`; only an **admin/owner** may wire up a shared-key tool with a teammate's

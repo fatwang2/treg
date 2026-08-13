@@ -166,6 +166,7 @@ class TeamTool(TypedDict, total=False):
     name: str | None
     base_url: str | None
     description: str | None
+    call_note: str | None  # e.g. "base URL already ends in /v25.0 — start paths at the resource"
 
 
 class MyToolsOut(TypedDict, total=False):
@@ -581,8 +582,11 @@ async def my_tools(ctx: Context) -> MyToolsOut:
     return {
         "team": slug,
         "count": len(tools),
+        # call_note rides along when present — e.g. "base URL already ends in /v25.0 — start
+        # paths at the resource": the agent about to compose a path is exactly who must read it.
         "tools": [{"name": t.get("name"), "base_url": t.get("base_url"),
-                   "description": t.get("description")} for t in tools],
+                   "description": t.get("description"), "call_note": t.get("call_note")}
+                  for t in tools],
     }
 
 

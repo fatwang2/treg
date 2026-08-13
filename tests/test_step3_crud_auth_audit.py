@@ -92,3 +92,24 @@ async def test_call_is_audited(clients: AsyncClient):
     assert rec["user_email"] == "tim@superdesign.dev"
     assert rec["method"] == "GET"
     assert rec["status_code"] == 200
+
+
+async def test_a_versioned_base_url_warns_at_registration_and_in_listings(clients: AsyncClient):
+    """The doubled-version path (`graph.facebook.com/v25.0/v25.0/me` — 24 prod errors on one tool,
+    2026-08-12) happens because nothing told the caller the version was already in the base URL.
+    The registry relays verbatim by design, so the fix is a note where every caller looks."""
+    s = await clients.post("/secrets", json={"name": "fb", "value": "sek"})
+    r = await clients.post("/tools", json={"name": "fb", "base_url": "https://graph.facebook.com/v25.0",
+                                           "secret_id": s.json()["id"]})
+    assert r.status_code == 200
+    assert "already ends in /v25.0" in r.json()["call_note"]
+
+    listed = {t["name"]: t for t in (await clients.get("/tools")).json()}
+    assert "v25.0" in listed["fb"]["call_note"]
+
+
+async def test_an_unversioned_base_url_carries_no_note(clients: AsyncClient):
+    s = await clients.post("/secrets", json={"name": "p", "value": "sek"})
+    r = await clients.post("/tools", json={"name": "plain", "base_url": "https://api.example.com",
+                                           "secret_id": s.json()["id"]})
+    assert r.json()["call_note"] is None
