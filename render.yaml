@@ -34,20 +34,21 @@ services:
           name: treg-db
           property: connectionString
       # Public base URL — drives the OAuth callback, /meta, /llms.txt, /install.sh, all {BASE} links.
-      # STAGED CUTOVER (treg.superdesign.dev → treg.to): this deliberately still names the OLD
-      # domain so the migration code deploys INERT — behavior byte-identical to pre-migration.
-      # The flip to https://treg.to is its own later one-line PR, and setting this back IS the
-      # complete rollback (PUBLIC_HOST_ALIASES keeps both names valid in both directions).
+      # CUTOVER (treg.superdesign.dev → treg.to, 2026-08): setting this back to
+      # https://treg.superdesign.dev is the complete, lossless rollback — PUBLIC_HOST_ALIASES
+      # keeps both names valid in both directions, and the old domain must stay attached on
+      # Render forever (installed clients hold tokens against it).
       - key: TREG_PUBLIC_URL
-        value: https://treg.superdesign.dev
+        value: https://treg.to
       # Never return OTP codes in prod responses (account-takeover vector); email them via Resend.
       - key: TREG_EMAIL_DEV_MODE
         value: "false"
-      # Flips to no-reply@treg.to in its own PR, AFTER the URL flip soaks AND a real canary send
-      # from the Resend-verified treg.to domain — send failures are swallowed by design, so an
-      # unverified sender silently kills OTP login.
+      # treg.to is Resend-verified (DKIM + SPF). Deliverability canary after every change to this
+      # value: sign in via email OTP and confirm the code ARRIVES — send failures are swallowed by
+      # design, so a broken sender silently kills OTP login. Rollback: the old sender stays
+      # verified in Resend forever.
       - key: TREG_EMAIL_FROM
-        value: tools-registry <no-reply@treg.superdesign.dev>
+        value: tools-registry <no-reply@treg.to>
       - key: PYTHON_VERSION
         value: "3.12.7"
       # Dashboard-managed secrets (paste values in Render; sync:false keeps them out of git).
