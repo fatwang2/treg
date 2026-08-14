@@ -410,6 +410,91 @@ def example_path(endpoint_id: str) -> Path | None:
 
 # ---- shaping ---------------------------------------------------------------------------------
 
+def platform_rows(cat: Catalog) -> list[dict]:
+    """The platform SHELVES — one row per platform anyone can browse, busiest first.
+
+    The census counts the BROWSE surface only: account/utility ("management") endpoints are real
+    inventory but not what a shelf advertises, so they never inflate the endpoint/capability/
+    verified counts or the "from …" price. They still ship in the platform detail (with `kind`
+    set) — see the API's `?include_hidden`.
+
+    Lives here, not in the route, because two surfaces render it: `/catalog/platforms` (JSON, for
+    the dashboard and the CLI) and the public catalog page. A census that disagreed between them
+    would have someone reading "113 endpoints" on one page and "129" on the other.
+    """
+    rows = []
+    for slug, plat in cat.platforms.items():
+        eps = [e for e in cat.for_platform(slug) if e["kind"] not in HIDDEN_KINDS]
+        if not eps:  # a taxonomy entry no provider implements (or only plumbing) is grid noise
+            continue
+        rows.append({
+            "slug": slug,
+            "label": plat["label"],
+            "category": plat["category"],
+            "featured": plat.get("featured"),  # rank within its category's Featured shelf; null = not featured
+            "summary": plat.get("summary", ""),
+            # cheapest PAID option, for the card's "from …" corner. Ordering compares the
+            # server-computed USD figure, so CNY rows and provider-credit rows sort against dollar
+            # rows honestly; the ORIGINAL value+currency rides along for display. Zero-cost utility
+            # routes would otherwise advertise a misleading "from $0"; genuinely free own-account
+            # access is signaled separately by `price_from` staying null.
+            "price_from": min(
+                (c for e in eps if (c := cat.cost_view(e.get("cost"), e.get("provider"))) and c["usd"]),
+                key=lambda c: c["usd"],
+                default=None,
+            ),
+            "capabilities": len({e["capability"] for e in eps if e["capability"]}),
+            "endpoints": len(eps),
+            "verified": len([e for e in eps if e["verified"]]),
+            "providers": sorted({e["provider"] for e in eps}),
+        })
+    rows.sort(key=lambda r: (-r["endpoints"], r["slug"]))
+    return rows
+
+
+def native_amount(value, currency: str, meter: str = "") -> str:
+    """The provider's own number in its own unit. "credit" is a provider-scoped unit, not a
+    currency, so it reads as a noun ("3 credits") rather than a currency prefix ("credit 3") — and
+    `currency: unit` is a provider METER named by `cost.unit`, so it reads the same way
+    ("5000 analysis units"), never as the literal word "unit"."""
+    if value is None:
+        return ""
+    if currency == "credit":
+        return f"{value:g} credit{'' if value == 1 else 's'}"
+    if currency == "unit":
+        noun = (meter or "unit").replace("_", " ")
+        return f"{value:g} {noun}{'' if value == 1 else 's'}"
+    return f"${value:g}" if currency in ("USD", "") else f"{currency} {value:g}"
+
+
+def cost_label(cost) -> str:
+    """A price you can scan in a column: "$0.001/success", "free", "3 credits/call".
+
+    Server-side only, and deliberately NOT shared with `cli.py`: the CLI is the light install and
+    may not import this module (pyyaml is a `[server]` extra), so it keeps its own copy in
+    `_cost_label`. Change the wording in one and change it in the other.
+    """
+    if not isinstance(cost, dict):
+        return "—"
+    kind = (cost.get("type") or "").replace("_", " ")
+    value, currency = cost.get("value"), cost.get("currency") or ""
+    if kind == "free":
+        return "free"
+    if value in (None, ""):
+        # A known billing unit with an unpublished number: say which. A bare "per success" reads
+        # as free, and "—" hides that we do know how it is metered.
+        return f"per {kind[4:]} · price in provider dashboard" if kind.startswith("per ") else (kind or "—")
+    # `quota_rows` prices a CALL, in rows — so the denominator is "call" and the row count shows up
+    # as the native amount ("1 quota row/call"), not as "1 quota row/quota rows".
+    unit = {"per call": "call", "per result": "result", "per success": "success",
+            "quota rows": "call"}.get(kind, kind or "call")
+    usd = cost.get("usd")
+    if usd is not None:
+        native = "" if currency in ("USD", "") else f" ({native_amount(value, currency, cost.get('unit') or '')})"
+        return f"${usd:g}/{unit}{native}"
+    return f"{native_amount(value, currency, cost.get('unit') or '')}/{unit}"
+
+
 def endpoint_view(ep: dict, provider_display: str, cat: Catalog | None = None) -> dict:
     """The public JSON shape of one endpoint (the dashboard + CLI render this)."""
     return {

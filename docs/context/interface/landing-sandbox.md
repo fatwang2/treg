@@ -21,6 +21,11 @@ mini-registry in the browser and keeps using it from their terminal, all without
 engine is `src/treg/sandbox.py` + a handful of `api.py` endpoints; the front-end drives it with `sbx*`
 Vue methods (`sbxInit`/`startSandbox`/`refreshSandbox`/`sbxAddSecret`/`sbxAddTool`/`runTool`).
 
+The marketing landing (`web/landing.html`) also carries a plain **Catalog** link in its nav, to the
+public catalog pages (`/catalog` — see [catalog](../architecture/catalog.md)). That is the one thing
+a visitor can inspect before deciding anything, so it is a link rather than something behind the
+sign-in modal.
+
 ## The throwaway team (`sandbox.py`)
 `mint(db)` creates a login-free team: a `visitor-<hex>@sandbox.treg.local` `User` (can never sign in),
 a `demo` `Org` slugged `sbx-<hex>`, a member `Membership` whose **token is returned** (unlike

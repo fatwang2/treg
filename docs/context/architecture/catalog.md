@@ -3,6 +3,8 @@ title: Endpoint catalog — what you can DO with a connected key, and which prov
 status: shipped
 sources:
   - src/treg/catalog_store.py
+  - src/treg/catalogpage.py
+  - src/treg/web/catalog.css
   - src/treg/endpoint_stats.py
 related:
   - architecture/money.md
@@ -711,6 +713,40 @@ to treg's own key — so it cannot be side-stepped to spend our money (a URL-pas
 against the org's OWN tools and 404s without one). A team holding its own key for another provider
 can still call that provider by URL; that is their credential and their bill, and `DenyRule` —
 host-scoped, applied to every shape of call — is the tool for blocking it.
+
+## The public catalog pages (`catalogpage.py`)
+
+`GET /catalog` and `GET /catalog/p/<slug>` serve the same inventory as HTML, to **anyone** — no
+session, no token. The dashboard's Catalog view is behind a sign-in, which is the wrong way round
+for the half of the product that is a public list of endpoints and prices: a visitor had to create
+an account before they could find out whether treg calls the thing they need.
+
+**Server-rendered, no JavaScript.** It has to be readable by a crawler and by an agent that fetches
+the URL; the data behind it is already open (`/catalog/*` needs no auth), so there is nothing to
+fetch client-side that the server cannot simply print. Search is a plain GET form, so a result is a
+linkable URL (`/catalog?q=backlinks`) rather than a state the page holds.
+
+The pages render from **this module's own functions** — `platform_rows`, `domain_rows`,
+`endpoint_view`, `search`, `cost_label` — which are the same ones the JSON routes answer with. That
+is the point: a census or a price cannot differ between the page and the API. `platform_rows` was
+extracted from the `/catalog/platforms` route for exactly this reason, and a test asserts the
+endpoint total on the page equals the one the API reports.
+
+Two deliberate differences from the JSON:
+
+- **The browse surface only.** `search()` matches everything, `HIDDEN_KINDS` included — right for an
+  agent looking up an endpoint by name, wrong for a person, who does not want "backlinks" answered
+  with three ways to poll a scraper run. The page filters, then limits (limiting first would let a
+  page of plumbing eat the results worth showing), and reports the filtered count.
+- **An unknown slug is a 404**, never an empty 200 — a crawler indexes an empty 200.
+
+`cost_label` / `native_amount` live in `catalog_store` because the page needs them server-side.
+They are NOT shared with `cli.py`, which keeps its own `_cost_label`: the CLI is the light install
+and may not import this module (pyyaml is a `[server]` extra). Two copies, one wording — change
+both.
+
+The page states plainly, in its footer and on every platform page, that treg **compares** providers
+and does not route between them. A public page is exactly where that would get overstated.
 
 ## Security
 

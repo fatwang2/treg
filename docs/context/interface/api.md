@@ -4,6 +4,7 @@ status: shipped
 sources:
   - src/treg/api.py
   - src/treg/catalog_store.py
+  - src/treg/catalogpage.py
   - src/treg/email.py
   - src/treg/runner.py
   - src/treg/ratestore.py
@@ -197,6 +198,14 @@ what they created; `_require_admin_of` gates the org-admin endpoints. See
   through the loaded catalog **before** any path is built, so caller input never reaches the filesystem
   (404 otherwise). Consumed by the dashboard and `treg catalog`; see
   [catalog](../architecture/catalog.md).
+- **Catalog PAGES** (open, HTML, `include_in_schema=False`): `catalog_page` (`GET /catalog`, `?q=`
+  searches) and `catalog_platform_page` (`GET /catalog/p/{slug}`, 404 unknown) serve the same
+  inventory to a person or a crawler with **no session and no token**, plus `catalog_css`
+  (`GET /catalog.css`). Server-rendered by `catalogpage.py` from `catalog_store`'s own functions, so
+  the page and the JSON cannot disagree; cached `public, max-age=300`. Registered above the JSON
+  routes for readability only — `/catalog` is one segment and `/catalog/p/<slug>` shares no literal
+  prefix with `/catalog/platforms/<slug>` or `/catalog/endpoints/<id>`, so nothing is shadowed (a
+  test asserts the JSON routes still answer JSON). See [catalog](../architecture/catalog.md).
 - **Catalog discover → inspect** (open, same section): the two routes that complete the loop whose third
   step is `treg call`. `catalog_search` (`GET /catalog/search?q=&limit=` , default 25, capped 100) →
   `{query, count, total, results[], hints[]}`; a result is the endpoint view **plus** `{capability,
@@ -303,7 +312,8 @@ what they created; `_require_admin_of` gates the org-admin endpoints. See
   at `/dashboard-tour/` (serves `web/tour/` — `tour.js`, the standalone `index.html`, and the WebP
   `img/`). `favicon` (`GET /favicon.svg` + `/favicon.ico`). `llms_txt` (`GET /llms.txt`) serves
   `web/llms.txt` as `text/plain` with `{BASE}` templated from `public_url` — the [llms.txt](https://llmstxt.org)
-  agent-onboarding file (call protocol + discovery + auth + CLI + skills + doc links). See [dashboard](dashboard.md).
+  agent-onboarding file (call protocol + discovery + auth + CLI + skills + doc links, and the
+  no-account `/catalog` pages to send a human to). See [dashboard](dashboard.md).
   `install_sh` (`GET /install.sh`, `{BASE}`-templated) serves the CLI installer (`web/install.sh`).
   `well_known_skills_index` (`GET /.well-known/skills/index.json`) + `well_known_skill_md`
   (`GET /.well-known/skills/treg/SKILL.md`) advertise treg's own skill under the agentskills.io

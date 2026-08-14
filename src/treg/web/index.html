@@ -433,20 +433,9 @@
   .tour-mat{border-radius:14px;padding:min(4vw,36px);display:flex;justify-content:center;margin:2px 0 4px;transition:background .3s}
   .tour-mat img{width:100%;max-width:960px;height:auto;border-radius:9px;box-shadow:0 16px 44px rgba(0,0,0,.36),0 3px 9px rgba(0,0,0,.22);display:block}
   @media(max-width:760px){.tut-body{grid-template-columns:1fr}.tut-nav{border-right:0;border-bottom:1px solid var(--line);position:static;max-height:210px}}
-  /* App shell: collapse the fixed sidebar to a single column on narrow viewports + let wide tables
-     scroll inside themselves so the page body never scrolls horizontally on mobile. */
-  @media(max-width:760px){
-    /* minmax(0,1fr) stops the grid column from expanding to its content's min-width (the classic
-       1fr blowout); min-width:0 + overflow-wrap let long nav text / the "Tools in <email>" heading
-       wrap instead of forcing horizontal page scroll. */
-    .layout{grid-template-columns:minmax(0,1fr);min-height:0}
-    .side{border-right:0;border-bottom:1px solid var(--line);min-width:0} main{min-width:0}
-    .side-acct{margin-top:12px}  /* on mobile the sidebar is a top strip - don't push account to the bottom */
-    h1,.tut-head,.brand{overflow-wrap:anywhere}
-    table{display:block;overflow-x:auto;white-space:nowrap}td,th{word-break:break-word}
-    /* header wraps instead of forcing horizontal page scroll: the search drops to its own full-width
-       row and the flex spacer is removed so brand/org/theme/avatar/sign-out fit the viewport. */
-    .top{flex-wrap:wrap;gap:8px;padding:10px 12px}.top .spacer{display:none}.search{flex:1 1 100%;max-width:none;order:9}.orgsel{min-width:0}}
+  /* The app shell's narrow-viewport behaviour lives in ONE block, at the very END of this sheet
+     (search for "RESPONSIVE"). It has to: the restyle phases below re-specify .top and .side after
+     this point, so a rule written here loses to them at every width. */
   /* ---- landing page (logged-out) ---- */
   .lp{max-width:1040px;margin:0 auto;padding:0 20px 60px}
   .lp-nav{display:flex;align-items:center;justify-content:space-between;padding:16px 0;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:20}
@@ -647,7 +636,7 @@ th{background:rgba(0,0,0,.25)}
 /* sidebar: pinned below the top bar with its own scroll, so HELP + the account
    footer stay on screen no matter how long the main column gets */
 .side{position:sticky;top:57px;height:calc(100vh - 57px);overflow-y:auto;align-self:start}
-@media(max-width:760px){.side{position:static;height:auto;overflow:visible}}
+/* (below --bp-nav it stops being a column at all and becomes a drawer — see RESPONSIVE) */
 /* light theme keeps its paper palette but adopts the new fonts + shapes */
 [data-theme="light"] body::before{display:none}
 
@@ -1051,6 +1040,152 @@ a:hover{text-decoration-color:var(--muted)}
 .s-path{font-weight:600}
 .hl-comment,.s-cmt{color:var(--sx-cmt);font-style:italic}
 .hl-punct,.hl-env{color:var(--sx-punct)}
+
+/* ================================================================
+   RESPONSIVE — the app shell on a phone and a tablet.
+
+   LAST block in the sheet, and deliberately so: every earlier attempt
+   at this lived up near the base rules, where the two restyle phases
+   re-specify `.top` and `.side` after it and win on source order. The
+   sidebar stayed a hard 230px column at every width as a result.
+
+   Two breakpoints, and only two:
+     ≤960px  the sidebar stops being a column and becomes a DRAWER,
+             opened by the ☰ in the top bar (the `navtoggle`, hidden
+             above this width). Below a tablet, 230px of permanent
+             chrome is a quarter of the screen spent on navigation.
+     ≤620px  one-column content: page headers stack, their action rows
+             go full width, and the chrome gives back its padding.
+
+   The top bar keeps its 57px height at EVERY width on purpose — the
+   sticky ledger offsets (--lbar-top / --lsec-top) and the drawer's
+   `top` are all measured from it, so a header that wrapped to two rows
+   on a phone would leave three separate things floating.
+   ================================================================ */
+.navtoggle{display:none}
+.side-scrim{display:none}
+@media(max-width:960px){
+  .navtoggle{display:grid;place-items:center;flex:0 0 34px;width:34px;height:34px;padding:0;
+    background:none;border:1px solid var(--line2);border-radius:var(--rb);color:var(--ink);
+    transition:background-color .18s var(--ease)}
+  .navtoggle:hover{background:var(--hover)}
+  .top{gap:10px;padding:11px 14px}
+  /* The wordmark is two glyphs and a word; at 320px it was breaking between them. */
+  .brand{white-space:nowrap;flex:0 0 auto}
+  /* The search keeps its row rather than dropping below: it is how you find a tool, and a phone
+     has no `/` key to focus it with. min-width:0 lets it shrink past its content instead of
+     pushing the ☰ off the left edge. */
+  .search{flex:1 1 auto;min-width:0;max-width:none}
+  .layout{grid-template-columns:minmax(0,1fr);min-height:0}
+  main{min-width:0;max-width:none}
+  /* The height is stated, not inferred from top+bottom: `.side` is a grid item that the fixed
+     positioning takes out of flow, and the `align-self:start` it inherited from the desktop rule
+     collapsed it to its content — a drawer that stopped two thirds down the screen. dvh so the
+     mobile browser's collapsing address bar doesn't crop the account row. */
+  .side{position:fixed;top:57px;left:0;z-index:41;width:min(86vw,290px);
+    height:calc(100vh - 57px);height:calc(100dvh - 57px);
+    border-right:1px solid var(--line);border-bottom:0;overflow-y:auto;box-shadow:var(--shadow-lg);
+    transform:translateX(-101%);visibility:hidden;
+    transition:transform .22s var(--ease),visibility .22s var(--ease)}
+  /* visibility (not just the transform) so a closed drawer is out of the tab order — a keyboard
+     user must not tab into six nav buttons parked off-screen. */
+  .side.open{transform:none;visibility:visible}
+  .side-scrim{display:block;position:fixed;inset:57px 0 0;z-index:40;
+    background:color-mix(in srgb,var(--inverse-ink) 45%,transparent)}
+  /* Wide content scrolls INSIDE itself so the page body never scrolls sideways. .ttable-wrap is
+     `overflow:hidden` at rest (it clips its own corner radius), which turns a wide table into a
+     silently cut-off one rather than a scrollable one. */
+  /* …except the ledger's wrapper (.lwrap), which drops its overflow clip ON PURPOSE: a scroll
+     container is a containing block for sticky, and its section headings would never leave it.
+     The ledger earns its narrow layout by shedding columns instead — see below. */
+  .ttable-wrap:not(.lwrap){overflow-x:auto}
+  /* A bare <table> has no wrapper to scroll in, so it becomes its own scroll box. NOT the ledger
+     (table-layout:fixed + sticky section headings, both of which `display:block` destroys) and not
+     .prm-t, which is already a fixed-percentage grid inside a card.
+     `nowrap` is load-bearing, not cosmetic: a block-level table shrink-wraps to the scroll box, and
+     the base `overflow-wrap:anywhere` on cells then lets every column collapse to one character —
+     the Team roster rendered "Email" as five stacked letters. Nowrap gives the columns their
+     natural width back and hands the overflow to the scroll box, which is the point. */
+  table:not(.ledger):not(.prm-t){display:block;overflow-x:auto;max-width:100%}
+  table:not(.ledger):not(.prm-t) th,table:not(.ledger):not(.prm-t) td{white-space:nowrap}
+  .kv{gap:14px}
+}
+@media (prefers-reduced-motion: reduce){.side{transition:none}}
+
+/* ---- page headers ----
+   `.tut-head` is a flex row whose actions carry `margin-left:auto`. On a narrow screen the row
+   cannot fit both, and h1 — which an older mobile rule gave `overflow-wrap:anywhere` — collapsed
+   to its min-content, ONE CHARACTER wide: "2,600+ tools for agents" rendered as a vertical column
+   of letters. The row wraps instead, and the heading breaks on word boundaries like prose. */
+.tut-head{flex-wrap:wrap;row-gap:10px}
+.tut-head>div{min-width:0}
+h1,.plat-title h1{overflow-wrap:break-word}
+@media(max-width:620px){
+  .tut-head{align-items:flex-start}
+  /* The actions stop being a right-hand cluster and become a full-width row of equals — three
+     33%-wide buttons beat three that wrap one word each. */
+  .tut-actions{margin-left:0;width:100%;flex-wrap:wrap}
+  .tut-actions .btn{flex:1 1 auto;justify-content:center}
+  main{padding:16px 14px}
+  h1{font-size:20px}
+  .sec-h b{font-size:16px}
+  .statgrid{grid-template-columns:repeat(auto-fill,minmax(min(100%,132px),1fr));gap:8px}
+  .stat{padding:11px} .stat .n{font-size:21px}
+  .card{padding:13px}
+  .start-hd{padding:12px 14px} .start-bd{padding:14px}
+  .modal{width:96vw;max-height:92vh}
+  .drawer{width:100vw}
+  .plat-title{gap:10px}
+  /* The "— or paste a key —" divider is nowrap so its two rules meet the label on one line. At
+     390px the label alone is wider than the column, so the rules go and the label wraps. */
+  .oauth-div{white-space:normal;text-align:center;flex-wrap:wrap;gap:8px}
+  .oauth-div::before,.oauth-div::after{display:none}
+  .soon-note{white-space:normal}
+}
+
+/* ---- strips that must scroll, not wrap ----
+   A tab bar that wraps to two ragged rows moves every tab under the pointer between renders.
+   `.mk-tabs` already scrolls; these are the strips that were left behind. */
+.tabs,.seg{max-width:100%;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none}
+.tabs::-webkit-scrollbar,.seg::-webkit-scrollbar{display:none}
+.tabs button,.seg button{flex:0 0 auto;white-space:nowrap}
+.exrow,.chips,.mk-filters{max-width:100%}
+
+/* ---- the platform ledger on a phone ----
+   Four columns do not fit in 390px, and `table-layout:fixed` means they do not try — they just
+   squeeze the first one to nothing. The ✓ column and the route line are the two the page can
+   lose: "verified" is repeated as a chip inside the expansion, and the path is the first thing
+   the expansion shows. What survives is what the row is FOR: the job, and the price. */
+@media(max-width:620px){
+  :root{--lbar-top:57px;--lsec-top:103px}
+  /* One row still, because --lsec-top is measured from its height. The chip strip and the filter
+     box both flex, so neither starves: at 390px that lands ~120px on each instead of the 46px
+     stub ("filte…") a fixed-width input left behind. */
+  .lbar{gap:6px;padding:10px 0 8px;flex-wrap:nowrap}
+  .lchips{flex:1 1 84px}
+  .lchk{font-size:11px;gap:5px}
+  .lfind{flex:1 1 120px;width:auto;min-width:0;padding:6px 9px;font-size:12px}
+  /* 104px is what "$0.015/success" needs at this size — narrower and every price on the page
+     ellipsises to "$0.015/s…", which is the one number the row exists to show. */
+  .lth-w{width:auto} .lth-p{width:104px} .lth-v,.ledger td:nth-child(4){display:none}
+  .ledger th:nth-child(2),.ledger td:nth-child(2){display:none}
+  .ledger th,.ledger td{padding:8px 9px}
+  .lsum-i{max-width:none} .lprice{font-size:10.5px}
+  .lsub{flex-wrap:wrap} .lsub-path{display:none}
+  .ltabs{flex-wrap:wrap;row-gap:6px} .ltabs-r{margin-left:0;width:100%}
+  .lcall{flex-wrap:wrap}
+  /* The section headings span the columns that are still there. */
+  .lsec td{padding:6px 9px}
+}
+
+/* ---- long, unbreakable strings ----
+   A base_url, a token or a 70-character provider path is one "word" as far as wrapping is
+   concerned, and one of them is enough to push a phone's whole page sideways. */
+.mono,.cli,.host,.acct-you,.orgname{min-width:0}
+@media(max-width:960px){
+  .card .host,.kv div,.lpath,.prm-ex{overflow-wrap:anywhere}
+  pre{font-size:11.5px}
+}
 </style>
 </head>
 <body>
@@ -1276,13 +1411,25 @@ a:hover{text-decoration-color:var(--muted)}
   <template v-else>
     <a href="#maincontent" class="skip">Skip to content</a>
     <div class="top" role="banner">
+      <!-- Below 960px the sidebar is a drawer and this is its only door. Hidden above that width
+           by CSS, so the desktop header is unchanged. -->
+      <button class="navtoggle" @click="navOpen=!navOpen" :aria-expanded="navOpen"
+              aria-controls="sidenav" :aria-label="navOpen?'Close menu':'Open menu'">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <template v-if="navOpen"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></template>
+          <template v-else><path d="M3 6h18"/><path d="M3 12h18"/><path d="M3 18h18"/></template>
+        </svg>
+      </button>
       <div class="brand">▚ treg</div>
       <div class="search"><span class="muted">/</span><input ref="search" v-model="q" :placeholder="view==='connections'?'search the catalog…':'search tools…'" aria-label="Search"/></div>
       <div class="spacer"></div>
     </div>
 
     <div class="layout">
-      <nav class="side">
+      <!-- Tapping the page behind an open drawer closes it — the gesture everyone tries first.
+           The scrim only exists (display:block) inside the drawer breakpoint. -->
+      <div class="side-scrim" v-if="navOpen" @click="navOpen=false"></div>
+      <nav class="side" id="sidenav" :class="{open:navOpen}">
         <!-- ORG (top): name → settings · ▾ → switch -->
         <div class="orgblock">
           <div class="orgmain" ref="orgmain" @click="toggleOrgMenu" role="button" tabindex="0" @keydown.enter="toggleOrgMenu" aria-haspopup="true" :aria-expanded="orgMenu" aria-label="Teams">
@@ -1352,7 +1499,9 @@ a:hover{text-decoration-color:var(--muted)}
         <!-- TOOLS -->
         <template v-if="view==='connections'">
           <div class="tut-head">
-            <div><h1>2,600+ tools for agents</h1><p class="sub" style="margin:0">Connect an account once. treg holds the credential server-side and injects it on every call — nothing lands on your machine.</p></div>
+            <div><h1>2,600+ tools for agents</h1><p class="sub" style="margin:0">Connect an account once. treg holds the credential server-side and injects it on every call — nothing lands on your machine.
+              <!-- The same catalog, with no sign-in — the link to send a teammate who is still deciding. -->
+              <a href="/catalog" target="_blank" rel="noopener">Public catalog ↗</a></p></div>
             <!-- (The balance pill lives in the side nav, above the account block.) -->
             <div class="tut-actions">
               <button class="btn sm" @click="openToolRequest()" title="Missing a tool or provider? Tell us — requests steer what gets added next"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><line x1="12" y1="7" x2="12" y2="13"/><line x1="9" y1="10" x2="15" y2="10"/></svg>Request a tool</button>
@@ -1674,7 +1823,7 @@ a:hover{text-decoration-color:var(--muted)}
               <!-- A row, its section heading and its expanded detail are all table rows, so each
                    level rides a wrapper tag — a tbody per group would strip the row separators. -->
               <template v-for="sec in platLedger" :key="sec.domain">
-                <tr class="lsec" :class="{on:sec.actions}"><td colspan="4">
+                <tr class="lsec" :class="{on:sec.actions}"><td :colspan="ledgerCols">
                   <!-- The one collapsed section: every account/utility endpoint on the platform,
                        whatever domain it nominally belongs to. -->
                   <button v-if="sec.actions" class="lsec-btn" :aria-expanded="platActionsOpen"
@@ -1725,7 +1874,7 @@ a:hover{text-decoration-color:var(--muted)}
                           v-else class="xmark" title="Documented, but treg has not called it with a live key yet">·</span></td>
                   </tr>
                   <tr v-if="platOpen[r.key]" :key="r.key+'::d'" class="cat-d">
-                    <td colspan="4">
+                    <td :colspan="ledgerCols">
                       <!-- TWO LEVELS on a merged row: it opens to its providers, one collapsed line
                            each, and a provider opens to its own instruction. Dropping six full
                            parameter tables on one click buried the comparison the merge exists to
@@ -3464,6 +3613,11 @@ createApp({
     return {
       theme: localStorage.getItem('treg-theme')||'light',
       cfg, tokenInput:'', busy:false, loginErr:'', addOrg:false, orgMenu:false, orgMenuStyle:null,
+      navOpen:false,  // the sidebar-as-drawer, below 960px only (above it the CSS ignores this)
+      // Phone width, mirrored into JS. CSS hides two of the ledger's four columns there, and a
+      // `colspan` is the one thing a stylesheet cannot fix: a colspan=4 on a two-column table
+      // conjures the missing columns back, and the visible ones collapse into a third of the row.
+      narrow: window.matchMedia('(max-width:620px)').matches,
       emailInput:'', codeInput:'', emailStage:false, devCode:'', pendingInvites:[], invitePrefill:'', inviteChoice:false, inviteBusy:false,
       inviteSel:{}, inviteLinkOrg:null, inviteErr:'',  // multi-select accept: checked ids, the org_id the clicked email link was for, partial-failure note
       tut:{i:0, panel:null}, tutCopied:false, tourI:0, helpMode:null, xtut:{i:0},
@@ -3559,6 +3713,8 @@ createApp({
     };
   },
   computed:{
+    // How many columns the platform ledger actually has right now — see `narrow`.
+    ledgerCols(){ return this.narrow ? 2 : 4; },
     // Marketplace shelves. /oauth/providers already returns providers grouped-then-alphabetical, so
     // this walks the list once and starts a shelf whenever the category changes — re-sorting here
     // would just be a second place to keep the order in step with the registry.
@@ -5011,6 +5167,7 @@ createApp({
       this.go('orgs'); },
     resetConfirms(){ this.confirmDelTool=null; this.confirmDelSecret=null; this.confirmDelBundle=null; this.confirmRemove=null; this.confirmLeave=false; this.confirmDel=''; this.confirmAdmUser=null; this.confirmAdmOrg=null; },
     go(v, fromPop){ this.resetConfirms();  // stale inline "Confirm" states must not survive a view switch (accidental-delete risk)
+      this.navOpen=false;  // the drawer is a nav; picking a destination is what closes it
       this.detail=null; this.view=v; if(v==='activity')this.loadCalls(); if(v==='admin')this.loadAdmin(); if(v==='orgs'){this.loadOrgAdmin(); this.loadMyUsage(); this.loadBilling();} if(v==='usage')this.loadUsage(); if(v==='secrets'){this.loadSecrets(); if(!this.providers.length)this.loadConnections();} if(v==='connections')this.loadConnections();
       // push history so browser Back navigates BETWEEN views instead of leaving the app; the '/app'
       // pathname also walks back from a /app/skills/<x> detail URL so reload doesn't reopen the detail
@@ -5035,7 +5192,7 @@ createApp({
         if(el) el.scrollIntoView({block:'center', behavior:'smooth'}); });
       setTimeout(()=>{ if(this.byokFocus===service) this.byokFocus=null; }, 4000);
     },
-    openProvider(service, fromPop){ this.resetConfirms();
+    openProvider(service, fromPop){ this.resetConfirms(); this.navOpen=false;
       this.detail=null; this.mkService=service; this.view='provider';
       if(!fromPop) history.pushState({mk:service}, '', '/app/marketplace/'+encodeURIComponent(service));
       // The consent popup can return before /connections has been re-read, and a deep link may
@@ -5061,7 +5218,7 @@ createApp({
     viewFromHash(){ let v=(location.hash||'').replace('#','');
       if(v==='billing'){ this.orgTab='billing'; v='orgs'; }
       return ['tools','orgs','activity','usage','admin','help','secrets','start','connections'].includes(v)?v:null; },
-    openPlatform(slug, fromPop){ this.resetConfirms();
+    openPlatform(slug, fromPop){ this.resetConfirms(); this.navOpen=false;
       this.detail=null; this.platSlug=slug; this.view='platform'; this.platOpen={}; this.epOpen={}; this.epTab={}; this.platEx={}; this.platActionsOpen=false;
       this.platClearFilters(); this.platCopied='';
       if(!fromPop) history.pushState({platform:slug}, '', '/app#platform/'+encodeURIComponent(slug));
@@ -5296,7 +5453,7 @@ createApp({
               nat ? 'billed as '+nat+'/'+this.priceUnit(c.type)+', converted at the catalog’s FX rate' : '',
               c.value==null&&c.type!=='free' ? 'billed '+c.type.replace(/_/g,' ')+' — the provider does not publish the rate, check your plan in their dashboard' : ''].filter(Boolean).join(' — ')
         || 'What this endpoint costs at the provider'; },
-    openDetail(kind, name, fromPop){ this.resetConfirms();
+    openDetail(kind, name, fromPop){ this.resetConfirms(); this.navOpen=false;
       this.detail={kind, name}; this.view='detail'; this.detailFile='SKILL.md'; this.detailCopied=''; this.detailNote='';
       if(!fromPop) history.pushState({detail:{kind,name}}, '', '/app/'+(kind==='skill'?'skills':'tools')+'/'+encodeURIComponent(name));
       this.loadDetail(); },
@@ -5554,11 +5711,15 @@ createApp({
       this.orgMenuStyle={position:'fixed', top:(r.bottom+6)+'px', left:r.left+'px'};
     },
     toggleOrgMenu(){ this.orgMenu=!this.orgMenu; if(this.orgMenu) this.placeOrgMenu(); },
-    closeOverlays(){ this.newTool=false; this.newSkill=false; this.showJoin=false; this.newOrg=false; this.addOrg=false; this.tryTool=null; this.copyTool=null; this.orgMenu=false; this.share.on=false; },
+    closeOverlays(){ this.newTool=false; this.newSkill=false; this.showJoin=false; this.newOrg=false; this.addOrg=false; this.tryTool=null; this.copyTool=null; this.orgMenu=false; this.share.on=false; this.navOpen=false; },
   },
   async mounted(){
     document.documentElement.dataset.theme=this.theme;
     document.addEventListener('click', ()=>{ if(this.mdMenu) this.mdMenu=false; });  // outside-click closes the copy-markdown menu
+    // Keep `narrow` in step with the stylesheet's own breakpoint — one source of truth for the
+    // width, so rotating a phone re-lays the ledger out instead of leaving a stale colspan.
+    const mq=window.matchMedia('(max-width:620px)');
+    (mq.addEventListener ? mq.addEventListener.bind(mq,'change') : mq.addListener.bind(mq))(e=>{ this.narrow=e.matches; });
     document.addEventListener('keydown', e=>{
       // Escape closes any open modal/drawer (a universal expectation the modals didn't honour)
       if(e.key==='Escape'){ this.closeOverlays(); return; }

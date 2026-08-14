@@ -642,6 +642,43 @@ chips, and lazy examples). `tests/test_catalog_api.py` locks the server half: th
 merged/single split, the domain resolution ladder, and a delivery-mode path segment never becoming a
 subject.
 
+## Narrow viewports — the sidebar becomes a drawer
+The shell is responsive at **two** breakpoints, and every rule for them lives in ONE block at the
+very **end** of index.html's sheet, labelled `RESPONSIVE`. The placement is load-bearing: the two
+restyle phases re-specify `.top` and `.side` late in the sheet, so the earlier generation of mobile
+rules (a `max-width:760px` block sitting up beside the base rules) lost to them on source order and
+the sidebar stayed a hard 230px column at every width.
+
+- **≤960px** — the sidebar stops being a grid column and becomes an **off-canvas drawer**: fixed
+  under the top bar, `translateX(-101%)` at rest, opened by the `☰` **`navtoggle`** that appears in
+  the top bar only at this width. `visibility:hidden` rides along with the transform so a closed
+  drawer is out of the tab order. A `.side-scrim` covers the page (tap to close), and `navOpen` is
+  cleared by `go()`, `openProvider()`, `openPlatform()`, `openDetail()` and `closeOverlays()` — so
+  picking a destination, or pressing Escape, closes it. Its height is **stated**
+  (`calc(100dvh - 57px)`), not inferred from `top`+`bottom`: the desktop rule's `align-self:start`
+  collapses a fixed grid item to its content.
+- **≤620px** — content goes one-column: `.tut-head` action rows go full width, paddings shrink, the
+  `.oauth-div` divider drops its rules, and the ledger sheds two columns.
+
+The **top bar keeps its 57px height at every width**. Three things are measured from it — the
+drawer's `top`, `--lbar-top` and `--lsec-top` — so the older rule that wrapped the search onto its
+own row on a phone left all three pointing at nothing.
+
+Two traps this cost, both worth not re-learning:
+- **`overflow-wrap:anywhere` on `h1`** (the old mobile block set it) makes the heading's min-content
+  ONE CHARACTER, and `.tut-head` is a flex row: "2,600+ tools for agents" rendered as a vertical
+  column of letters. The row wraps now, and headings break on words.
+- **`.ttable-wrap` must NOT gain `overflow-x` on the ledger** (`.lwrap`), which drops its overflow
+  clip on purpose — a scroll container is a containing block for `position:sticky`, and the ledger's
+  section headings would never leave it. The narrow rule is `.ttable-wrap:not(.lwrap)`.
+
+The ledger earns its phone layout by **hiding the route and ✓ columns** instead of scrolling. That
+needs a matching `colspan`, which no stylesheet can supply: a `colspan="4"` on a two-column table
+conjures the hidden columns back and squeezes the visible ones into a third of the row. Hence
+`narrow` (a `matchMedia('(max-width:620px)')` mirror in `data`, kept live by a `change` listener)
+and the `ledgerCols` computed the section and expansion rows bind their `:colspan` to — the one
+place JS is allowed to know the stylesheet's breakpoint.
+
 ## Code surfaces (every page)
 Snippet blocks (`.lc-codewrap` on Getting started, the in-app CLI tutorial's `.term` panes, the
 standalone `/tutorial`, the connect/setup instruction panes, the ledger's `treg call` line and captured

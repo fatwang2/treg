@@ -97,6 +97,10 @@ Start from the job, not the vendor:
     treg call tikhub.tiktok.user.profile --query uniqueId=tiktok
     # raw HTTP: GET {BASE}/call/tikhub.tiktok.user.profile?uniqueId=tiktok  + X-Treg-Token
 
+The same inventory is browsable as HTML, with NO account and no token:
+`{BASE}/catalog` (all platforms; `?q=` searches), `{BASE}/catalog/p/<platform-slug>` (one
+platform's endpoints, prices and routes). Link a human there when they ask what treg can do.
+
 Searched and the catalog genuinely lacks it? File it — requests steer which provider gets added
 next: `treg catalog request "<what you need>"`, or raw HTTP
 `POST {BASE}/tool-requests {"capability": "<what you need>"}` (no token required).
@@ -465,6 +469,8 @@ Example (an agent calling Intercom with no key on its box):
   local-run on/off dial.
 - [The official Claude skill]({BASE}/skill.md): the 3-persona (consumer/creator/admin) skill —
   save it to `~/.claude/skills/treg/SKILL.md` (install.sh does this automatically).
+- [Public catalog]({BASE}/catalog): every catalogued platform and endpoint, with prices, readable
+  without signing in — the page to send someone who asks "what can it actually call?".
 - [Web dashboard]({BASE}/): sign in and manage everything in the browser (tools, secrets,
   invites, Try-it, activity, admin). It also has a guided first-run and a screenshot tour.
 - [README](https://github.com/superdesigndev/treg/blob/main/README.md): overview,

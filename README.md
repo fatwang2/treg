@@ -224,6 +224,9 @@ treg org access <member> --tools a,b          # per-member tool access (admin+)
 ## Going deeper
 
 - [`USAGE.md`](USAGE.md) — the full `treg` CLI reference.
+- [**The public catalog**](https://treg.to/catalog) — every catalogued platform and endpoint, with
+prices, readable **without an account**. Search it (`/catalog?q=backlinks`) or open one platform
+(`/catalog/p/tiktok`) to see its whole ledger.
 - [`/llms.txt`](https://treg.to/llms.txt) — the agent-onboarding file: call
 protocol, discovery, auth, CLI, skills. One fetch teaches an agent the whole registry.
 - **The dashboard** at [treg.to](https://treg.to) — full CRUD, a guided

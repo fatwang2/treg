@@ -1,0 +1,208 @@
+/* ================================================================
+   The PUBLIC catalog (/catalog, /catalog/p/<slug>) — see catalogpage.py.
+
+   Skin: the platform's rows.gg-derived system, tokens lifted verbatim from index.html's RESTYLE
+   block and landing.html, so the three surfaces read as one product. Rules of the system: no brand
+   accent (emphasis is ink, colour is reserved for status); sans everywhere, mono only for
+   identifiers, routes, commands and counts; cards are surfaces (shadow, not border).
+
+   Written narrow-first. Nothing here has a fixed width above a phone's, every grid is auto-fill,
+   and the one wide thing on the page — the endpoint ledger — scrolls inside its own wrapper.
+   ================================================================ */
+:root{
+  --bg:#f4f4f1; --surface:#fff; --panel2:#f0f0ee;
+  --ink:#1a1a1a; --muted:#7c7c7c; --muted2:#989898;
+  --line:#2626231a; --line2:#25252233; --hover:#2a2a250a;
+  --teal:#1a7da6; --green:#118453;
+  --inverse:#1a1a1a; --inverse-ink:#f8f8f7;
+  --shadow-sm:0 1px 2px #00000014;
+  --shadow-md:0 1px 2px -1px #0000000a,0 4px 6px -1px #0000000f;
+  --ease:cubic-bezier(.2,.72,.25,1);
+  --r:15px; --rb:10px;
+  --display:"Geist Pixel",Georgia,serif;
+  --sans:"Suisse Intl","Inter","Segoe UI",system-ui,sans-serif;
+  --mono:"DM Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  color-scheme:light;
+}
+/* The dashboard remembers a theme in localStorage; a static page has no such memory, so it follows
+   the reader's OS instead of guessing. Only the tokens change — every rule below is written once. */
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#161518; --surface:#1e1d20; --panel2:#232226;
+    --ink:#f0f0ee; --muted:#989898; --muted2:#6f6f6d;
+    --line:#f3f3f512; --line2:#f3f3f524; --hover:#f4f4f50a;
+    --teal:#6fcdf0; --green:#45e39e;
+    --inverse:#f8f8f7; --inverse-ink:#1a1a1a;
+    --shadow-sm:0 1px 2px #00000052;
+    --shadow-md:0 1px 2px -1px #0000003d,0 4px 6px -1px #00000052;
+    color-scheme:dark;
+  }
+}
+*{box-sizing:border-box;min-width:0}
+html{overflow-x:clip}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;
+  line-height:1.55;-webkit-font-smoothing:antialiased}
+a{color:var(--ink);text-decoration:none}
+:focus-visible{outline:0;box-shadow:0 0 0 2px var(--bg),0 0 0 3.5px var(--ink)}
+.skip{position:absolute;left:-9999px;top:8px;z-index:99;background:var(--inverse);
+  color:var(--inverse-ink);padding:9px 14px;border-radius:var(--rb)}
+.skip:focus{left:10px}
+.quiet{color:var(--muted)}
+
+/* ---- chrome ---- */
+.topbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:14px;
+  padding:11px 20px;background:var(--surface);border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:9px;font-family:var(--mono);font-weight:600;font-size:15px}
+.brand .glyph{display:grid;place-items:center;width:27px;height:27px;border-radius:8px;
+  background:var(--inverse);color:var(--inverse-ink);font-size:13px}
+.toplinks{margin-left:auto;display:flex;align-items:center;gap:18px}
+.toplinks a{font-size:13.5px;font-weight:500;color:var(--muted)}
+.toplinks a:hover{color:var(--ink)}
+.toplinks .cta{background:var(--inverse);color:var(--inverse-ink);border-radius:999px;
+  padding:7px 16px;font-size:12.5px}
+main{max-width:1120px;margin:0 auto;padding:26px 20px 10px}
+
+/* ---- hero ---- */
+.crumbs{max-width:1120px;margin:0 auto;padding:16px 20px 0;font-size:13px}
+.crumbs a{color:var(--muted)} .crumbs a:hover{color:var(--ink)}
+.hero{margin-bottom:30px}
+.hero h1{font-family:var(--display);font-size:clamp(25px,5.2vw,38px);line-height:1.12;
+  letter-spacing:-.5px;margin:0 0 12px;overflow-wrap:break-word}
+.hero.plat h1{display:flex;align-items:center;gap:13px}
+.lead{margin:0;font-size:15.5px;color:var(--muted);max-width:70ch}
+.lead b{color:var(--ink);font-weight:600}
+.stats{margin:14px 0 0;font-family:var(--mono);font-size:13px;color:var(--muted)}
+.stats b{color:var(--ink);font-weight:500}
+.provs{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:14px 0 0;font-size:13px}
+.chip{border:1px solid var(--line2);border-radius:999px;padding:3px 11px;font-size:11.5px;
+  color:var(--muted)}
+
+/* ---- search ---- */
+.find{display:flex;gap:8px;margin-top:20px;max-width:660px}
+.find input{flex:1;min-width:0;background:var(--surface);border:1px solid var(--line2);
+  border-radius:var(--rb);padding:11px 14px;font-family:var(--sans);font-size:14px;color:var(--ink)}
+.find input::placeholder{color:var(--muted2)}
+.find button{flex:0 0 auto;background:var(--inverse);color:var(--inverse-ink);border:0;
+  border-radius:var(--rb);padding:11px 20px;font-family:var(--sans);font-size:14px;font-weight:500;
+  cursor:pointer}
+
+/* ---- shelves ---- */
+.shelf{margin-bottom:34px}
+.shelf-h{display:flex;align-items:baseline;gap:9px;margin:0 0 13px;font-family:var(--sans);
+  font-size:18px;font-weight:500;letter-spacing:-.3px}
+.count{border:1px solid var(--line2);border-radius:999px;padding:1px 9px;font-family:var(--mono);
+  font-size:11.5px;font-weight:400;color:var(--muted)}
+/* minmax(min(100%,290px),1fr): the min() is what keeps a 320px phone from getting a grid track
+   wider than its own screen. */
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,290px),1fr));gap:12px}
+.pcard{display:flex;flex-direction:column;gap:11px;background:var(--surface);border-radius:var(--r);
+  padding:15px 16px;box-shadow:var(--shadow-sm);transition:box-shadow .24s var(--ease)}
+.pcard:hover{box-shadow:var(--shadow-md)}
+.pcard-top{display:flex;align-items:center;gap:11px}
+.pcard-name{min-width:0}
+.pcard-name b{display:block;font-size:14px;font-weight:500;letter-spacing:-.2px;line-height:1.3}
+.pcard-name .quiet{display:block;font-size:11.5px}
+.pcard-sum{flex:1;font-size:12.5px;line-height:1.5;color:var(--muted);
+  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.pcard-foot{display:flex;align-items:center;justify-content:space-between;gap:9px;
+  border-top:1px solid var(--line);padding-top:10px;font-size:11.5px;color:var(--muted)}
+.price b{color:var(--ink);font-weight:500;font-family:var(--mono)}
+.plogo{display:grid;place-items:center;width:38px;height:38px;flex:0 0 38px;border-radius:11px;
+  background:#fbfaf7;border:1px solid rgba(0,0,0,.07);overflow:hidden;
+  font-family:var(--sans);font-weight:600;color:#555}
+.plogo img{width:23px;height:23px;object-fit:contain;display:block}
+.plogo.big{width:46px;height:46px;flex:0 0 46px;border-radius:13px}
+.plogo.big img{width:28px;height:28px}
+
+/* ---- search results ---- */
+.hits{list-style:none;margin:0 0 16px;padding:0;background:var(--surface);border-radius:var(--r);
+  box-shadow:var(--shadow-sm);overflow:hidden}
+.hit{display:flex;align-items:center;gap:12px;padding:11px 15px;border-bottom:1px solid var(--line)}
+.hit:last-child{border-bottom:0}
+.hit:hover{background:var(--hover)}
+.hit-main{flex:1;min-width:0}
+.hit-main b{display:block;font-size:13.5px;font-weight:500;line-height:1.35}
+.hit-main .quiet{font-size:11.5px}
+.hit-price{flex:0 0 auto;font-family:var(--mono);font-size:12px;color:var(--muted);
+  font-variant-numeric:tabular-nums}
+.empty{background:var(--surface);border-radius:var(--r);box-shadow:var(--shadow-sm);
+  padding:16px;color:var(--muted);margin:0 0 28px}
+
+/* ---- the "how to call it" panel ---- */
+.callout{background:var(--surface);border-radius:var(--r);box-shadow:var(--shadow-sm);
+  padding:16px 18px;margin-bottom:30px}
+.callout p{margin:0 0 10px;font-size:13.5px;color:var(--muted)}
+.callout p:last-child{margin-bottom:0}
+.callout b{color:var(--ink)}
+.cmd{margin:0 0 10px;padding:12px 14px;background:var(--panel2);border:1px solid var(--line);
+  border-radius:var(--rb);font-family:var(--mono);font-size:12.5px;line-height:1.6;
+  overflow-x:auto}
+.cmd code{white-space:pre}
+
+/* ---- the endpoint ledger ---- */
+.sec{margin-bottom:30px}
+/* The one thing on the page too wide for a phone. It scrolls INSIDE this wrapper, so the page body
+   never scrolls sideways — and the wrapper, not the table, carries the rounded surface. */
+.tablewrap{background:var(--surface);border-radius:var(--r);box-shadow:var(--shadow-sm);
+  overflow-x:auto}
+.ledger{width:100%;border-collapse:collapse;font-size:13px}
+.ledger th{text-align:left;padding:10px 14px;font-size:10px;font-weight:450;text-transform:uppercase;
+  letter-spacing:.07em;color:var(--muted2);border-bottom:1px solid var(--line2);white-space:nowrap}
+.ledger td{padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+.ledger tr:last-child td{border-bottom:0}
+.ledger tr:hover td{background:var(--hover)}
+.c-what{min-width:210px}
+.c-what b{font-weight:500;line-height:1.4}
+.c-what .quiet{display:block;font-size:11.5px;line-height:1.45;margin-top:2px}
+.c-route{min-width:230px}
+.prov{display:block;font-size:12px;font-weight:500}
+.route{display:block;font-family:var(--mono);font-size:11px;color:var(--muted);
+  margin-top:2px;overflow-wrap:anywhere}
+.route .m{color:var(--teal);font-weight:500;margin-right:6px}
+.docs{font-size:11px;color:var(--muted);text-decoration:underline;text-underline-offset:3px}
+.docs:hover{color:var(--ink)}
+.c-price{white-space:nowrap;font-family:var(--mono);font-size:12px;color:var(--muted);
+  font-variant-numeric:tabular-nums}
+.c-v{width:1%;text-align:center}
+.tick{color:var(--green);font-weight:600}
+/* A job several providers do: one heading, then their rows under it. This IS the comparison. */
+.job td{background:var(--panel2);font-size:12px;padding:7px 14px}
+.job b{font-weight:500}
+
+/* ---- footer ---- */
+.foot{max-width:1120px;margin:0 auto;padding:24px 20px 44px;border-top:1px solid var(--line);
+  font-size:13px;color:var(--muted)}
+.foot p{margin:0 0 9px;max-width:78ch}
+.foot b{color:var(--ink)}
+.foot a{color:var(--muted);text-decoration:underline;text-underline-offset:3px}
+.foot a:hover{color:var(--ink)}
+
+@media(max-width:620px){
+  .topbar{padding:10px 14px;gap:10px}
+  .toplinks{gap:13px}
+  .toplinks .hidem{display:none}
+  main{padding:20px 14px 8px}
+  .crumbs{padding:14px 14px 0}
+  .foot{padding:20px 14px 36px}
+  /* Stacked, because a 100px "Search" button next to a 14px placeholder leaves neither readable. */
+  .find{flex-wrap:wrap} .find input{flex:1 1 100%} .find button{flex:1 1 100%}
+  .hit{flex-wrap:wrap;gap:4px} .hit-price{flex:1 1 100%}
+  .shelf-h{font-size:16px}
+  .hero{margin-bottom:24px}
+  /* The ledger stops being a table and becomes a list of blocks. A four-column table on a 390px
+     screen can only scroll sideways, and the column that falls off the right edge is the PRICE —
+     the one number this page exists to publish. Stacked, every row shows all four facts. */
+  .tablewrap{overflow-x:visible}
+  .ledger,.ledger tbody,.ledger tr{display:block;width:auto}
+  .ledger thead{display:none}
+  .ledger tbody tr{padding:12px 13px;border-bottom:1px solid var(--line)}
+  .ledger tbody tr:last-child{border-bottom:0}
+  .ledger td{display:block;padding:0;border:0}
+  .c-what,.c-route{min-width:0}
+  .c-route{margin-top:6px}
+  /* Price and tick share a line: two blocks would read as two separate facts. */
+  .ledger td.c-price{display:inline-block;margin-top:7px}
+  .ledger td.c-v{display:inline-block;width:auto;margin-left:8px;text-align:left}
+  .job{background:var(--panel2)}
+  .job td{padding:0}
+}

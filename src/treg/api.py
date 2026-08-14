@@ -47,7 +47,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from . import analytics, audit, billing, catalog_store, crypto, demo as demo_seed, email as email_sender, endpoint_stats, health, injectors, ledger, localrun, oauth
+from . import analytics, audit, billing, catalog_store, catalogpage, crypto, demo as demo_seed, email as email_sender, endpoint_stats, health, injectors, ledger, localrun, oauth
 from . import oauth_providers
 from . import pubfeed, ratestore, reconcile, runner, sandbox as demo_sandbox, session as sess
 from .config import LEGACY_PUBLIC_HOSTS, PUBLIC_HOST_ALIASES, get_settings, platform_setting_name
@@ -427,43 +427,51 @@ def _provider_display(service: str) -> str:
     return p.display_name if p else service
 
 
+# ---- the PUBLIC catalog pages (HTML) -----------------------------------------------------------
+# The same inventory the JSON routes below serve, rendered for a person (and a crawler) with no
+# account. Registered BEFORE the JSON routes purely for readability — the paths do not overlap:
+# `/catalog` is one segment, and the page's detail route is `/catalog/p/<slug>`, which cannot
+# collide with `/catalog/platforms/<slug>` or `/catalog/endpoints/<id>`.
+# See src/treg/catalogpage.py for what the pages contain and why they are server-rendered.
+
+@app.get("/catalog", include_in_schema=False)
+async def catalog_page(q: str = ""):
+    """Open: the public catalog. `?q=` searches the whole catalog, as a plain GET so the result is
+    a linkable URL rather than a state the page holds."""
+    base = get_settings().public_url.rstrip("/")
+    # 5 minutes: the catalog changes only on deploy, but a stale price is worth less than a cheap
+    # page, so this is short enough that a fix reaches readers within one coffee break.
+    return HTMLResponse(catalogpage.index_page(base, q),
+                        headers={"Cache-Control": "public, max-age=300"})
+
+
+@app.get("/catalog/p/{slug}", include_in_schema=False)
+async def catalog_platform_page(slug: str):
+    """Open: one platform's public page — every endpoint, filed by subject, with prices."""
+    base = get_settings().public_url.rstrip("/")
+    html = catalogpage.platform_page(slug, base)
+    if html is None:
+        raise HTTPException(status_code=404, detail=f"unknown platform {slug!r}")
+    return HTMLResponse(html, headers={"Cache-Control": "public, max-age=300"})
+
+
+@app.get("/catalog.css", include_in_schema=False)
+async def catalog_css():
+    """The public catalog's stylesheet — one copy for both of its pages."""
+    f = _WEB_DIR / "catalog.css"
+    if not f.exists():
+        raise HTTPException(status_code=404, detail="catalog.css not bundled")
+    return FileResponse(f, media_type="text/css", headers={"Cache-Control": "public, max-age=300"})
+
+
 @app.get("/catalog/platforms", include_in_schema=False)
 async def catalog_platforms() -> dict:
-    """Open: the platform shelves of the endpoint catalog, busiest first."""
-    cat = catalog_store.load()
-    rows = []
-    for slug, plat in cat.platforms.items():
-        # The census counts the BROWSE surface only: account/utility ("management") endpoints are
-        # real inventory but they are not what a marketplace tile advertises, so they never inflate
-        # the endpoint/capability/verified counts or the "from …" price. They still ship in the
-        # platform-detail list (with `kind` set) — see catalog_platform's ?include_hidden.
-        eps = [e for e in cat.for_platform(slug) if e["kind"] not in catalog_store.HIDDEN_KINDS]
-        if not eps:  # a taxonomy entry no provider implements (or only plumbing) is grid noise
-            continue
-        rows.append({
-            "slug": slug,
-            "label": plat["label"],
-            "category": plat["category"],
-            "featured": plat.get("featured"),  # rank within its category's Featured shelf; null = not featured
-            "summary": plat.get("summary", ""),
-            # cheapest priced endpoint, for the card's "from …" corner. Ordering compares the
-            # server-computed USD figure, so CNY rows and provider-credit rows sort against dollar
-            # rows honestly; the ORIGINAL value+currency rides along for display.
-            # cheapest PAID option — zero-cost utility routes (rate-card freebies) would otherwise
-            # advertise a misleading "from $0"; genuinely free own-account access is signaled by the
-            # UI separately when a platform has only free endpoints (price_from stays null).
-            "price_from": min(
-                (c for e in eps if (c := cat.cost_view(e.get("cost"), e.get("provider"))) and c["usd"]),
-                key=lambda c: c["usd"],
-                default=None,
-            ),
-            "capabilities": len({e["capability"] for e in eps if e["capability"]}),
-            "endpoints": len(eps),
-            "verified": len([e for e in eps if e["verified"]]),
-            "providers": sorted({e["provider"] for e in eps}),
-        })
-    rows.sort(key=lambda r: (-r["endpoints"], r["slug"]))
-    return {"platforms": rows, "generated_from": "catalog"}
+    """Open: the platform shelves of the endpoint catalog, busiest first.
+
+    The census itself is `catalog_store.platform_rows` — shared with the public catalog page, so
+    the two surfaces cannot report different endpoint counts for the same platform."""
+    return {"platforms": catalog_store.platform_rows(catalog_store.load()),
+            "generated_from": "catalog"}
 
 
 @app.get("/catalog/platforms/{slug}", include_in_schema=False)
