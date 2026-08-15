@@ -152,6 +152,11 @@ provenance says whose price it is.
 An endpoint treg has no published price for is **refused**, not served free — you are told to
 connect your own key instead.
 
+**New shelf: Market data** (crypto + stocks) — coingecko, polygon, finnhub, twelvedata, fmp, eodhd,
+marketstack, tiingo. Connect-your-own-key today; catalogued endpoints and treg-key serving are being
+added. (Alpha Vantage is deliberately absent: its API accepts any key, so a pasted key can never be
+verified.)
+
 **Choosing between providers of one capability — the procedure.** `treg catalog get <id>` lists
 every provider serving the same job with `COST`, `WORKS` (the success rate treg has actually
 observed, with its sample size), `SPEED` (median) and `LAST OK`. Work down this order:

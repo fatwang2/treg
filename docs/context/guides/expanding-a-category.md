@@ -70,6 +70,9 @@ this fragment is the *process*, not the mechanics reference.
 | 200 on a bad key; an error object present = invalid | `token_reject_field` | Serpstat `error` |
 | 200 on a bad key; an `ERROR …` text body | handled automatically (text-error guard) | Semrush |
 | No free probe; valid key 400s on empty body, invalid 401s | `probe_reject_statuses=(401,403)` | Coresignal |
+| The provider's OWN "test my auth" endpoint answers 200 with prose for a bad key | probe a DATA endpoint instead | Tiingo `/api/test` (2026-08-14; `/tiingo/daily/aapl` 403s cleanly) |
+| A second host that answers 200 to anything (demo/free tier) | pin the host that rejects | CoinGecko demo host (2026-08-14) |
+| Accepts ANY key on every endpoint, even premium ones | DROP — cannot ship | Alpha Vantage (2026-08-14: `apikey=bogus123` returned real quote data) |
 | Ongoing tool health check | `probe_path` (a cheap GET on `base_url`) | most |
 
 The connect verify already parses JSON only when the response *is* JSON (so a CSV/text body doesn't error), and
