@@ -98,6 +98,29 @@ selected or the relay can run; the refusal is audited as `refused_by=retired`. T
 deliberate: an org's own tool named exactly like the old catalog id already resolved above and is not
 shadowed, while URL passthrough has no catalog-id shape to catch accidentally.
 
+**A dead end names its capability siblings.** Both refusals that end the ladder — the `410` tombstone
+with no `superseded_by`, and the tier-3 `404` when no credential can be found — append
+`_capability_alternatives(ep)`: the other providers catalogued for the same `capability`, cheapest
+first, each marked *callable now on treg's key* (both halves of `_platform_offer`'s tier-4 test hold)
+or *needs your own `<provider>` credential*. It is derived from `cat.endpoints`, which `_parse` has
+already stripped of marked rows, so a retirement stops being suggested the moment it is marked and no
+list is maintained by hand.
+
+Two facts motivate it. 41 of the 50 TikHub retirements have no same-provider successor, so
+`superseded_by` is structurally silent for them and a cross-provider sibling is the only migration
+path left. And on 2026-08-19 one org spent 268 calls on `meta-ad-library.meta-ads.library.search`,
+which treg holds no key for, while `scrapecreators.x.v1-facebook-adlibrary-search-ads` — the same
+capability string, on a key treg already had — answered 192 of 208 calls for fourteen other teams.
+The refusal knew the capability the whole time.
+
+This **compares, it does not route**: treg never fails over on the caller's behalf, so the refusal
+stands, nothing is substituted, and the choice stays with the caller. The helper is deliberately
+synchronous and I/O-free — observed success would need `endpoint_stats.observed` and a database
+round-trip on an error path, which is how a 404 becomes a 500, and `catalog get` already ranks the
+same siblings by observed success when the caller follows the pointer. It can only see curated
+`capability` values: an endpoint with a blank capability is invisible as an alternative, which is an
+argument for filling those in rather than for fuzzy id matching.
+
 **ACL-filtered candidates.** `_resolve_call` takes the **caller** and filters passthrough candidates by
 `_tool_usable` (project scope AND the per-tool list) **before** the longest-prefix tiebreak. A same-host
 tool the caller cannot use must not be able to cause a `409` — or win the tiebreak — for someone who

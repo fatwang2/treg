@@ -8580,6 +8580,11 @@ def _enforce_catalog_status(ep: dict) -> None:
         detail += f": {note}"
     if successor := str(ep.get("superseded_by") or "").strip():
         detail += f" Use {successor} instead."
+    elif alternatives := _capability_alternatives(ep):
+        # 41 of the 50 TikHub retirements have no same-provider successor, so `superseded_by` has
+        # nothing to say for them. A cross-provider sibling is the only help left — and it is the
+        # difference between a tombstone and a migration path.
+        detail += " " + " ".join(alternatives)
     else:
         detail += " No replacement is currently catalogued."
     raise HTTPException(status_code=410, detail=detail)
@@ -8851,7 +8856,50 @@ def _platform_offer(ep: dict, provider, org: Org) -> dict | None:
     return cat.cost_view(ep.get("cost"), ep["provider"]) or None
 
 
-def _marketplace_no_credential(service: str, ep_id: str, provider) -> HTTPException:
+def _capability_alternatives(ep: dict, *, limit: int = 3) -> list[str]:
+    """Other providers' endpoints for the same capability, best first — derived, never hand-written.
+
+    A dead end that names only the provider the caller asked for is the reason one org spent 268
+    calls on `meta-ad-library.meta-ads.library.search` while `scrapecreators.…-search-ads` — the
+    same `capability` string, on a key treg already holds — sat one row away answering 192 of 208
+    calls for fourteen other teams. The refusal knew the capability the whole time.
+
+    Read from `cat.endpoints`, which `_parse` has already stripped of marked rows, so a retirement
+    stops being suggested the moment it is marked and no list here needs maintaining. This
+    COMPARES, it does not route: treg never fails over on the caller's behalf (see the charter),
+    so this names the options and their prices and leaves the choice where it belongs.
+
+    Deliberately synchronous and I/O-free. Measured success would need `endpoint_stats.observed`
+    and a DB round-trip on an error path — which is how a 404 turns into a 500 — and the caller's
+    next step, `catalog get`, already ranks the same siblings by observed success.
+    """
+    capability = ep.get("capability")
+    if not capability:  # only curated capabilities can find siblings; nothing is better than a guess
+        return []
+    cat = catalog_store.load()
+    settings = get_settings()
+    ranked = []
+    for alt in cat.for_capability(capability):
+        if alt["id"] == ep["id"]:
+            continue
+        cost = cat.cost_view(alt.get("cost"), alt["provider"])
+        usd = cost.get("usd") if cost else None
+        # "Servable" is the caller's real question: not "does another row exist" but "can treg
+        # answer it for me right now". Both halves of tier 4, exactly as `_platform_offer` asks.
+        servable = bool(cat.platform_eligible(alt) and settings.platform_key_for(alt["provider"]))
+        ranked.append((not servable, usd if usd is not None else float("inf"), alt["id"], usd, servable))
+    if not ranked:
+        return []
+    ranked.sort()
+    lines = [f"another provider serves {capability}:"]
+    for _, _, alt_id, usd, servable in ranked[:limit]:
+        price = "price unknown" if usd is None else ("free" if usd == 0 else f"~${usd:g}/call")
+        how = "callable now on treg's key" if servable else f"needs your own {alt_id.split('.')[0]} credential"
+        lines.append(f"  {alt_id}  {price}  ({how})")
+    return lines
+
+
+def _marketplace_no_credential(service: str, ep_id: str, provider, ep: dict | None = None) -> HTTPException:
     """Tier 3: the actionable dead-end. Every line names a real command; a pasted-key provider
     gets the `secret add` route too (name it for the service so the ladder finds it)."""
     lines = [f"no {service} credential in this org — {ep_id} is a marketplace endpoint"]
@@ -8859,6 +8907,8 @@ def _marketplace_no_credential(service: str, ep_id: str, provider) -> HTTPExcept
     if provider.uses_pasted_secret:
         lines.append(f"  or add a key: treg secret add {service} --env-var {service.upper().replace('-', '_')}_API_KEY")
     lines.append(f"  or register the tool yourself: treg tool add {service} --base-url {provider.base_url} …")
+    if ep is not None:
+        lines.extend(_capability_alternatives(ep))
     return HTTPException(status_code=404, detail="\n".join(lines))
 
 
@@ -9335,7 +9385,7 @@ async def _resolve_marketplace_call(
         return MarketplaceCall(tool=virtual, tier="platform", **{
             **common, "cost_type": str(cost.get("type") or "per_call"),
             "estimate_micro": _platform_estimate_micro(cost, request.query_params, body)})
-    raise _marketplace_no_credential(service, ep["id"], provider)
+    raise _marketplace_no_credential(service, ep["id"], provider, ep)
 
 
 def _may_have_body(request: Request) -> bool:

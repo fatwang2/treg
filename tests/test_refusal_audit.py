@@ -89,7 +89,11 @@ async def test_retired_catalog_call_is_actionable_audited_and_does_not_shadow_an
     assert response.status_code == 410, response.text
     assert response.headers["X-Treg-Error"] == "1"
     assert "collapsed" in response.json()["detail"]
-    assert "No replacement is currently catalogued" in response.json()["detail"]
+    # 41 of the 50 retirements have no same-provider successor, so `superseded_by` is silent and a
+    # cross-provider sibling is the only migration path left. This is the exact endpoint the org in
+    # the report was calling, and the alternative is the one the capability rescue restored.
+    assert "another provider serves linkedin.search.people:" in response.json()["detail"]
+    assert "justoneapi.x.linkedin-search-user-v1" in response.json()["detail"]
     assert not relayed
     (record,) = await _rows()
     assert record.status_code == 410
@@ -117,3 +121,48 @@ async def test_retired_catalog_call_is_actionable_audited_and_does_not_shadow_an
     own = await clients.get(f"/call/{endpoint}")
     assert own.status_code == 200, own.text
     assert own.json()["auth"] == "Bearer own-key"
+
+
+async def test_a_credential_dead_end_names_a_sibling_treg_can_already_serve(
+    clients: AsyncClient, monkeypatch: pytest.MonkeyPatch,
+):
+    """The 2026-08-19 report's worst refusal: one org spent 268 calls on
+    `meta-ad-library.meta-ads.library.search`, which treg holds no key for, while
+    `scrapecreators.…-search-ads` — the SAME capability, on a key treg already has — answered 192
+    of 208 calls for fourteen other teams. The refusal knew the capability the whole time and never
+    said so. Tier 3 must now name the sibling, and mark whether it is callable or needs a
+    credential, so a dead end becomes a choice rather than a wall.
+    """
+    monkeypatch.setenv("TREG_PLATFORM_KEY_SCRAPECREATORS", "platform-scrapecreators-key")
+    monkeypatch.setenv("TREG_PLATFORM_PROVIDERS", "scrapecreators")
+    A.get_settings.cache_clear()
+
+    endpoint = "meta-ad-library.meta-ads.library.search"
+    sibling = "scrapecreators.x.v1-facebook-adlibrary-search-ads"
+    # Required params are validated before the ladder is walked, so send them: this test is about
+    # the credential dead end, not about the missing-parameter refusal in front of it.
+    query = {"ad_reached_countries": '["US"]', "fields": "id,page_name", "search_terms": "coffee"}
+
+    response = await clients.get(f"/call/{endpoint}", params=query)
+    assert response.status_code == 404, response.text
+    detail = response.json()["detail"]
+    # The original advice survives — the caller may still want their own Meta token.
+    assert "no meta-ad-library credential in this org" in detail
+    assert "treg connections connect --provider meta-ad-library" in detail
+    # ...and the sibling is now offered, flagged as servable, so the caller can act immediately.
+    assert "another provider serves meta-ads.library.search:" in detail
+    assert sibling in detail
+    assert "callable now on treg's key" in detail
+    # It COMPARES, never routes: the refusal stands and nothing was silently substituted.
+    (record,) = await _rows()
+    assert record.status_code == 404 and record.refused_by == "resolution"
+    assert record.tool_name == endpoint
+
+    # A provider treg holds no key for is still worth naming, but must not claim to be callable.
+    monkeypatch.setenv("TREG_PLATFORM_PROVIDERS", "")
+    A.get_settings.cache_clear()
+    unkeyed = (await clients.get(f"/call/{endpoint}", params=query)).json()["detail"]
+    assert sibling in unkeyed
+    assert "callable now on treg's key" not in unkeyed
+    assert "needs your own scrapecreators credential" in unkeyed
+    A.get_settings.cache_clear()

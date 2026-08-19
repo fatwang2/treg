@@ -9,6 +9,18 @@
 # the access token rides as ?access_token= — treg injects it, a direct caller that omits it gets a
 # 400 with a generic OAuthException rather than a 401.
 #
+# WHICH ADS EXIST HERE AT ALL — read this before the field notes, because it decides whether a
+# query can return anything, and getting it wrong reads as "the endpoint is broken". Two regimes,
+# and an ad outside BOTH is absent from this API entirely:
+#   - ads about social issues, elections or politics: worldwide, the past seven years;
+#   - ads of ANY type: only where they were delivered to the UK or EU, and only the past year.
+# Meta states the rule on the `ad_reached_countries` parameter: "Ads that did not reach any location
+# in the EU will only return if they are about social issues, elections or politics." So a US-only
+# commercial keyword search returns NO ROWS — not thinner rows, none — and that is a correct empty
+# answer, not a failure. Meta's own page says as much: "To search for all ads currently running
+# across Meta technologies, please use the Ad Library" (the web UI), which is why the UI-scraping
+# providers below cover ads this official API structurally cannot.
+#
 # What comes back depends on WHERE the ad ran and WHAT it is about, which is the one thing that
 # repeatedly surprises people:
 #   - spend, impressions, demographic_distribution and delivery_by_region are populated ONLY for
@@ -16,13 +28,26 @@
 #   - eu_total_reach, age_country_gender_reach_breakdown and beneficiary_payers exist only for ads
 #     delivered in the EU (the DSA disclosure set) — asking for them on a US-only query returns the
 #     rows with those fields simply absent, not an error.
-#   - commercial (non-political) ads outside the EU carry creative + timing + platform data only.
+#   - commercial (non-political) ads carry creative + timing + platform data only — and, per the
+#     eligibility rule above, they are returned ONLY for UK/EU delivery in the first place.
 # Requesting a field an ad does not have never fails the call, so an empty column means "not
-# disclosed for this ad", never "wrong parameter".
+# disclosed for this ad", never "wrong parameter". An empty RESULT SET is the eligibility rule,
+# not a field question — the two failure modes look identical and are not.
 #
 # This is the any_account / competitive view of Meta ads. Your OWN spend is meta-ads.yaml.
-# apify.yaml implements the same meta-ads.library.search capability by scraping the Ad Library UI —
-# richer per-ad detail, paid per result, and unofficial; this file is official, free and thinner.
+# Two providers implement the same meta-ads.library.search capability by scraping the Ad Library UI
+# instead, which is how they cover the US commercial ads this API omits — apify.yaml (paid per
+# result, richer per-ad detail) and scrapecreators (per call, and the one carrying live production
+# evidence: 192 of 208 calls succeeded across fourteen teams in the 30 days to 2026-08-19, versus
+# zero successful calls ever recorded against this file). Both are unofficial and break when Meta
+# changes the page; this one is official, free, and narrower than its name suggests.
+#
+# ACCESS is gated on a PERSON, not on a scope: whoever mints the token must complete the
+# identity confirmation at facebook.com/ID that Meta requires to run social-issue/election ads.
+# No permission, scope or app review is involved, so no OAuth consent can grant it — which is why
+# this is a pasted-key provider rather than part of the shared Meta OAuth app. Note also that a
+# Meta USER token expires (~60 days) while a treg platform key is a static setting with no refresh
+# path, so only a non-expiring Business system-user token is a safe fit for tier 4.
 provider: meta-ad-library
 source:
   docs: https://www.facebook.com/ads/library/api/
