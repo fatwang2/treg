@@ -1604,3 +1604,120 @@ USE_CASE_PAGES[("seo", "google-results-for-a-keyword")] = {
     "related": ("Keywords a domain ranks for", "Keyword volume, CPC and competition",
                 "Backlink profile of a domain", "How AI answers mention your brand"),
 }
+
+
+USE_CASE_PAGES[("advertising", "your-own-campaign-performance")] = {
+    "label": "Your own campaign performance",
+    "sentence": "Google Ads API and Meta Ads API: your own campaign numbers",
+    "title": "Google Ads API and Meta Ads API, free | treg.to",
+    "lede": (
+        "Spend, impressions, clicks and conversions for the campaigns you are already running, read "
+        "by {agent} off your own connected accounts. Both platforms are free through treg.to: you "
+        "connect once, the token stays server side, and nothing here is metered. The research behind "
+        "this page says the wall was never the endpoint. It was getting a credential in front of it."),
+    "prompt": "Using treg, pull last month's spend, impressions, clicks and conversions for every "
+              "campaign in my Google Ads and Meta Ads accounts, then tell me which three lost the "
+              "most money against a target of $40 per conversion.",
+    "prompt_why": [
+        ("Name the window", "Both take an explicit range. Ask for last month and you get last month, not lifetime to date."),
+        ("Ask for both platforms in one turn", "They are two calls, not two conversations. One turn gets you one table you can compare."),
+        ("Say which level you want", "Meta answers at account, campaign, ad set or ad. Pick one, or the totals will not mean what you think."),
+        ("Say what the answer is for", "Losing money is a judgement, not a field. Give it the threshold and it does the arithmetic."),
+    ],
+    "result_noun": "row",
+    "result_image": None,
+    "voices_intro": (
+        "From 82 Reddit and X posts read in August 2026, of which 17 were both on topic and "
+        "organic. Forty-three were dropped, including one X account that posted the same "
+        "build-it-in-Claude-Code lead magnet eighteen times. Two themes people say are the problem "
+        "here, the GAQL learning curve and rate limits, produced no organic posts at all, so this "
+        "page does not claim them."),
+    "voices": [
+        ("The wall is the credential, not the endpoint",
+         "A test developer token can only access whitelisted accounts. Move to standard access before you rely on it.",
+         "r/PPC, 50 points", "https://www.reddit.com/r/PPC/comments/1ubluzq/i_got_tired_of_logging_into_google_ads_every/",
+         "This was the largest theme in the research and it is the one thing treg.to genuinely "
+         "changes the shape of: the credential is injected server side, so it never reaches your "
+         "agent, your prompt or your repository. Be clear about what that does not do. It does not "
+         "grant you access you do not have, and a token that only sees whitelisted accounts still "
+         "only sees whitelisted accounts when the call goes through here."),
+        ("Meta can switch you off and not tell you why",
+         "I've been trying to connect my Meta Ads account to Claude via the MCP connector and I'm completely stuck.",
+         "r/FacebookAds, 7 points", "https://www.reddit.com/r/FacebookAds/comments/1t01u3w/meta_ads_mcp_connector_is_ads_mcp_enabled_false/",
+         "Worth being precise, because the reader's problem is a specific flag on Meta's own "
+         "connector rollout rather than the Marketing API. The row on this page is the ordinary "
+         "insights endpoint on your connected ad account, so that flag is not in its path. What "
+         "nobody outside Meta can tell you is why a permission is off on one portfolio and on for "
+         "another, and no proxy makes that legible."),
+        ("One account is a weekend, twenty clients is a product",
+         "I need to securely pull data from multiple client accounts, each with their own credentials and permissions.",
+         "r/claude, 2 points", "https://www.reddit.com/r/claude/comments/1t3ynsq/looking_for_developer_to_build_multi_client_api/",
+         "That is a paid job posting, which is the strongest evidence in the research that this is "
+         "real work rather than an inconvenience. Holding a credential per connection and keeping "
+         "it out of the agent is what a registry is for. Deciding which client an agent may read on "
+         "a given turn is still yours to design, and this page will not pretend otherwise."),
+        ("An agent will make the numbers up with total confidence",
+         "The only way I trust it is when it runs scripts and saves outputs.",
+         "r/PPC, 83 points", "https://www.reddit.com/r/PPC/comments/1sy40pq/my_experience_using_claude_code_codex_to_actually/",
+         "No good answer, and anyone claiming one is selling you something. Nothing here stops a "
+         "model inventing a figure. Two things do help and both are small: the platform's own "
+         "response is relayed verbatim rather than reshaped by a layer in between, and every call "
+         "is on the ledger, so the number in the answer has a call you can point at. Checking the "
+         "total against the platform's own dashboard is still worth the thirty seconds."),
+        ("The numbers move under you, and that is not going to stop",
+         "Meta deprecated Reach in the Facebook Graph API and it is breaking dashboards everywhere.",
+         "r/GoogleDataStudio, 6 points", "https://www.reddit.com/r/GoogleDataStudio/comments/1uv8e3n/meta_deprecated_reach_in_the_facebook_graph_api/",
+         "Honest answer: this is the opposite of a fix. treg.to never models an upstream API, it "
+         "relays the response as it came, so a deprecated field reaches you as a deprecated field "
+         "rather than as a mapping layer quietly returning something stale. You find out faster and "
+         "you find out truthfully. What no page can tell you is what Meta deprecates next."),
+    ],
+    "q_compare": "How do the two platforms compare?",
+    "what_is_heading": "What do these two APIs actually return?",
+    "what_is": (
+        "The reporting surface of each platform, not a copy of its dashboard. Google Ads answers a "
+        "query you write against a customer account and returns the campaign fields and metrics you "
+        "named, over the date range you named. Meta answers on an ad account and returns spend, "
+        "impressions, clicks and conversion counts at whichever level you ask for, optionally split "
+        "by day or by a breakdown. Both are read paths on accounts you already own, which is why "
+        "they carry no price."),
+    "notes": [
+        "Neither call costs money and both are rationed. Google Ads adds no per call charge and "
+        "counts the request against the developer token's daily operation limit instead, which is "
+        "15,000 operations a day on Basic access. Meta's insights call is included with the "
+        "connected account and spends that ad account's rate limit budget, and a wide breakdown "
+        "spends it fast, so ask for the split you will actually read.",
+        "The two platforms want the request in different shapes. Google Ads takes a query against a "
+        "customer id, so the fields, the metrics and the date range all travel in one string. Meta "
+        "takes the ad account in the path and everything else as parameters: fields, either a date "
+        "preset or an explicit range, the level, an optional daily increment and the breakdowns. "
+        "Your agent writes both, and the level is where a wrong answer looks right.",
+        "These two rows read, they do not spend. The capabilities behind this page are campaign "
+        "performance and insights, so an agent pointed at them can report on a budget and cannot "
+        "change one. If you want an agent that also edits campaigns, that is a different set of "
+        "capabilities and a separate decision to make on purpose.",
+    ],
+    "faq": [
+        ("Does this cost anything?",
+         "No. Both rows run on accounts you already own, so treg.to relays the call and meters "
+         "nothing, and the price shown before the call is zero. The provider's rate is the "
+         "provider's rate with $0.000 added, and here the provider's rate is nothing."),
+        ("Do I still need API access from Google and Meta?",
+         "Yes. treg.to holds the credential server side so it never reaches your agent, and it does "
+         "not stand between you and each platform's own access rules. A test developer token still "
+         "sees only the accounts it was whitelisted for, and a Meta permission you were not granted "
+         "is still not granted when the call arrives through here."),
+        ("Which numbers come back?",
+         "Spend, impressions, clicks and conversions at minimum. Meta will split them by day and by "
+         "the breakdown you ask for, at account, campaign, ad set or ad level. Google Ads returns "
+         "whichever campaign fields and metrics your query names, so the shape is yours to choose "
+         "rather than fixed."),
+        ("Can the agent change my campaigns?",
+         "Not through this page. Both capabilities behind it are read paths, so the worst an agent "
+         "can do here is read your numbers and be wrong about them. Changing a budget or pausing an "
+         "ad is a different capability and you would be asking for it deliberately."),
+    ],
+    "related": ("Ads a competitor is running now", "Keywords a domain bids on",
+                "Google Ads: the search terms triggering your ads",
+                "Search Console: clicks, impressions and top queries"),
+}
