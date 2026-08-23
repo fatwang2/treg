@@ -1843,3 +1843,126 @@ USE_CASE_PAGES[("e-commerce", "amazon-product-detail-by-asin")] = {
     "related": ("Amazon search and best sellers", "TikTok Shop products and reviews",
                 "App store search", "Product reviews"),
 }
+
+
+USE_CASE_PAGES[("local-businesses-reviews", "find-local-businesses-by-keyword-and-location")] = {
+    "label": "Find local businesses by keyword and location",
+    "sentence": "Yelp API and Tripadvisor API: local businesses by keyword",
+    "title": "Yelp API and Tripadvisor API, from {cheapest} | treg.to",
+    "lede": (
+        "Ask for a kind of business and a place, and get the listings back as data: names, ratings, "
+        "review counts, addresses and categories. Two sources through one treg.to key, from "
+        "{cheapest} a call, with no Yelp or Tripadvisor developer programme to be admitted to "
+        "first. They are different listings rather than two copies of one, so the comparison below "
+        "groups them rather than ranking them against each other."),
+    "prompt": "Using treg, find ramen restaurants in Austin, Texas on Yelp and on Tripadvisor. Show "
+              "me the price first, then give me one list with each place's name, rating, review "
+              "count and address.",
+    "prompt_why": [
+        ("Give the thing and the place separately", "Both sources take a description and a location as two fields. One blob of text resolves badly."),
+        ("Name the city and the state", "The commonest empty result on this job is a location string neither source recognises."),
+        ("Say which source you want", "Yelp and Tripadvisor hold different businesses. Ask for both and you get both, side by side."),
+        ("Ask for the price first", "treg.to returns the cost before the call, so the agent can say what it will spend."),
+    ],
+    "result_noun": "business",
+    "result_image": None,
+    "voices_intro": (
+        "From roughly 200 Reddit and X posts read in August 2026, with eleven vendor items "
+        "excluded, among them three accounts seeding the same Google Maps scraper across three "
+        "subreddits with the same story about a family member's small business. One finding is "
+        "worth stating before the quotes: nobody in the organic posts says Yelp has closed its API "
+        "programme, so this page does not say it either. The pain people actually report is "
+        "different and more mundane."),
+    "voices": [
+        ("It works in Postman and dies in the application",
+         "my call is successful in postman but I'm experiencing this error when making the call locally from the app",
+         "r/Angular2, 2 points", "https://www.reddit.com/r/Angular2/comments/7ns9gv/experiencing_403_when_making_get_call_to_yelp_api/",
+         "This shape recurred six times in the research and it is the one theme this page can "
+         "honestly own. The key is fine and the request is fine; what is wrong is where the call "
+         "came from, usually a browser preflight or a key that ended up inside a front end bundle. "
+         "A call through treg.to leaves a server with the credential injected there, so that class "
+         "of failure stops existing. It will not rescue you from a parameter the source rejects."),
+        ("A thousand results is the ceiling, and no proxy raises it",
+         "don't expect to pull more than 1,000 results as the Yelp Fusion API has a hard limitation in that regard",
+         "r/learnpython, 7 points", "https://www.reddit.com/r/learnpython/comments/92hcf7/how_to_loop_api_call_requests_yelp_fusion/",
+         "No good answer, and it would be dishonest to imply otherwise. A ceiling on a source is a "
+         "property of the source; buying the call from someone else does not lift it. The only "
+         "thing that actually works is fanning the question out, splitting a metro into its "
+         "suburbs and a trade into its categories, and paying per call for each slice. That is a "
+         "loop your agent can run and it is why the per call price matters more than it looks."),
+        ("Nobody reads the content rights until something makes them",
+         "I got to the Content rights part and hadn't looked into what rights I actually need for that information.",
+         "r/webdev, 3 points", "https://www.reddit.com/r/webdev/comments/1jekz4a/yelp_fusion_api_as_third_party_info_rights/",
+         "Also no good answer, and the place where a page like this is most tempted to be vague. "
+         "Having a credential injected for you changes who holds a key. It does not change who is "
+         "bound by the source's terms, which is still you, and a listing you pull here is still "
+         "Yelp's or Tripadvisor's content. If the plan is to republish it, that is a question for "
+         "their terms and not for a price table."),
+        ("Tripadvisor will not let you build on localhost",
+         "But problem is tripadvisor api does not allow to type localhost:3000.",
+         "r/node, 5 points", "https://www.reddit.com/r/node/comments/14hvtrp/how_do_i_allow_localhost3000_whem_i_am_using/",
+         "A narrow but real win. Tripadvisor's own programme issues keys tied to a domain, which is "
+         "exactly the thing a laptop does not have, and the thread underneath is people inventing "
+         "workarounds for it. The row here does not use that key at all, so there is nothing to "
+         "restrict and nothing to register before you can try it from your own machine."),
+        ("Most people already left for Google Maps, and it stops at the front desk",
+         "The issue I’m running into is that most tools (Google Maps, etc.) only give me the public front-desk phone number.",
+         "r/ClaudeCowork, 8 points", "https://www.reddit.com/r/ClaudeCowork/comments/1uxezdz/what_are_you_using_to_scrape_local_business/",
+         "The loudest theme in the whole research, so it deserves a straight answer rather than a "
+         "deflection. If Google Maps is the source you want, this page is not it: treg.to has no "
+         "Places keyword search on the menu today, and the Google rows it does have for local are "
+         "for a Business Profile you already own. On the second half, no listings source anywhere "
+         "carries the owner's address, because the listing does not have one. Getting past the "
+         "front desk is a second step against the business's own site, and it is the step with a "
+         "hard floor."),
+    ],
+    "q_compare": "How do the two sources compare?",
+    "what_is_heading": "What does a local business search return?",
+    "what_is": (
+        "A page of listings for one kind of business in one place, as data: the name, the rating "
+        "and how many reviews it is averaged over, the address, the categories the source files it "
+        "under, and its own page on that source. It is a directory lookup, not a lead list. "
+        "Nothing here is scored, deduplicated across sources or checked against a company register, "
+        "and the two sources will disagree about which businesses exist because they hold different "
+        "directories."),
+    "notes": [
+        "The two rows work differently, and one of them is not a single round trip. SerpApi reads "
+        "Yelp's own results page from a description and a location and answers immediately. "
+        "DataForSEO posts an asynchronous task against Tripadvisor which you collect afterwards, so "
+        "that side is two calls with a wait in between. Tell the agent to expect it rather than to "
+        "treat the empty first response as a failure.",
+        "Location is where this job fails quietly rather than loudly. DataForSEO takes a location "
+        "name or a numeric location code and will return a perfectly valid answer for the wrong "
+        "market if the code is not the one you meant. SerpApi takes free text, which is forgiving "
+        "until two places share a name. Give both the city and the state and check the first "
+        "result's address before you loop over three hundred queries.",
+        "Neither row makes you a Yelp or Tripadvisor developer, and neither changes whose content "
+        "it is. There is no Fusion key to be approved for and no domain restricted Tripadvisor key "
+        "to register, which removes the step people in the research got stuck on. What does not "
+        "move is the licence: the listings belong to Yelp and to Tripadvisor, and their terms bind "
+        "whoever republishes them, credential injection or not.",
+    ],
+    "faq": [
+        ("How much does one local business search cost?",
+         "The provider's own rate with $0.000 added by treg.to, from a prepaid balance rather than a "
+         "plan. The two sources are priced differently and are billed in different units, so the "
+         "comparison above gives each one separately rather than a single headline number."),
+        ("Is this the Yelp Fusion API?",
+         "No. The Yelp row reads Yelp's public results page for a description and a location, so "
+         "there is no Fusion key, no application and no approval to wait for. It also means you get "
+         "what the results page shows rather than the Fusion field set, and that Yelp's terms still "
+         "govern what you may do with the listings."),
+        ("Can I search Google Maps or Google Business Profile this way?",
+         "Not from this page. treg.to has no Google Places keyword search in the catalog today, and "
+         "the Google rows it does carry for local businesses read a Business Profile you already "
+         "own, on your own connected account. If Maps is the source you need, this job cannot serve "
+         "it and saying so is more useful than a near miss."),
+        ("Will I get the owner's email address?",
+         "No, and no listings source will. A directory entry carries the business's public contact "
+         "details, which in practice means the front desk. Going further means visiting each "
+         "business's own site and verifying what you find there, which is a separate job with its "
+         "own failure rate rather than a field you can ask for here."),
+    ],
+    "related": ("A business's reviews", "Hotel listing details", "Product reviews",
+                "Your Google Business Profile reviews, and reply to them"),
+}
