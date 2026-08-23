@@ -400,3 +400,17 @@ def test_related_links_point_at_jobs_that_exist():
     for key, spec in agent_pages.USE_CASE_PAGES.items():
         for label in spec["related"]:
             assert label in menu, (key, label)
+
+
+def test_related_cards_resolve_to_the_job_s_own_category():
+    """Four categories carry fewer than five jobs, so `related` has to cross categories there.
+    Resolving inside the current page's category sent those cards to the wrong anchor under a
+    caption naming the wrong category, and no test noticed because the label still existed."""
+    from treg.api import _related_link, _use_case_page_for
+    owner = {lbl: c for c, jobs in agent_pages.USE_CASES for lbl, _ in jobs}
+    for key, spec in agent_pages.USE_CASE_PAGES.items():
+        for lbl in spec["related"]:
+            href, cat = _related_link(lbl, "chatgpt")
+            assert cat == owner[lbl], (key, lbl, cat)
+            assert href == (_use_case_page_for(owner[lbl], lbl)
+                            or f"/agents/chatgpt#{agent_pages.category_slug(owner[lbl])}"), (key, lbl)

@@ -1481,3 +1481,126 @@ USE_CASE_PAGES[("youtube-video", "a-video-s-comments")] = {
     "related": ("Get a video's transcript", "Video details, views and stats",
                 "Mine the comments", "A channel's profile and lifetime stats"),
 }
+
+
+USE_CASE_PAGES[("seo", "google-results-for-a-keyword")] = {
+    "label": "Google results for a keyword",
+    "sentence": "SERP API: Google organic results for a keyword",
+    "title": "SERP API: {n} providers compared, from {cheapest} | treg.to",
+    "lede": (
+        "Send a keyword, get Google's organic results back as data: the ranking URLs in order, with "
+        "their titles and snippets. {n} providers do this through one treg.to key, from {cheapest} a "
+        "call, billed from a prepaid balance instead of a monthly plan. What you are really choosing "
+        "between is the billing unit, how deep each one goes, and how much of the page beyond ten "
+        "blue links it can see."),
+    "prompt": "Using treg, get the top 10 Google organic results for best crm for startups in the "
+              "United States, in English. Show me the price first, then list the ranking domains "
+              "with their titles.",
+    "prompt_why": [
+        ("Give it the keyword, not a URL", "These take a query the way a person types it. Keep multi-word phrases together."),
+        ("Say where and in what language", "A result set is location specific. Leave it out and you get whichever default the provider picked."),
+        ("Say how deep to go", "Depth is the cost dial on every row here: ten results is one unit of work, a hundred is ten."),
+        ("Ask for the price first", "treg.to returns the cost before the call, so the agent can say what it will spend."),
+    ],
+    "result_noun": "result",
+    "result_image": None,
+    "voices_intro": (
+        "From roughly 180 Reddit and X posts read in August 2026. The X half was almost entirely "
+        "promotion; Reddit carried the signal, and thirteen posts from four confirmed vendor rings "
+        "were excluded, including one account running the same question through three scraping "
+        "subreddits with a different persona each time. These five are organic."),
+    "voices": [
+        ("An agent search API and a SERP API are not the same product",
+         "My current take is that most “search APIs” are really context providers for LLM grounding.",
+         "r/AI_Agents, 2 points", "https://www.reddit.com/r/AI_Agents/comments/1urn878/highrecall_web_search_apis_for_agent_data/",
+         "This was the most useful distinction in the whole research pass, and it decides whether "
+         "this page is for you. Tools that return cleaned passages for a model to read are solving "
+         "grounding. The rows here return the result set itself, in order, with the domains that "
+         "hold each position. If you need to know who ranks where, cleaned context will not tell "
+         "you, and if you only need something true to quote, you are overpaying here."),
+        ("There is no pay as you go, and that is the objection",
+         "What bothers me mostly is that there's no pay-as-yo-go option for SerpAPI or Firecrawl as far as I can tell.",
+         "r/TypingMind, 3 points", "https://www.reddit.com/r/TypingMind/comments/1qri4jd/help_needed_customization_of_typingmind_deep/",
+         "The complaint that came up most often was about the shape of the bill rather than the "
+         "size of it: a monthly plan is the wrong instrument for someone running twenty searches a "
+         "day. Every row here is charged per call from a prepaid balance, at the provider's own "
+         "rate with nothing added, so the honest counterpoint is that at that volume the price "
+         "differences between providers are noise and the real cost is your setup time."),
+        ("Google stopped serving a hundred results on one page",
+         "The removal created a 10x increase in the workload for data collection.",
+         "r/AgentsOfAI, 204 points", "https://www.reddit.com/r/AgentsOfAI/comments/1nxut66/google_trying_to_retain_its_search_engine_monopoly/",
+         "This is the single best explanation of why a cheap looking per search rate can still "
+         "surprise you. When one fetch stopped returning a hundred results, reading the top hundred "
+         "became ten fetches, and every provider passes that through somewhere: as depth billed in "
+         "tens, as rows, or as ten separate searches. Read the unit column above before the price "
+         "column."),
+        ("The free tier runs out before the project starts",
+         "APIs like SerpAPI have pretty limited free tiers, so I'm looking into alternative ways to handle search without running into those limits.",
+         "r/Playwright, 2 points", "https://www.reddit.com/r/Playwright/comments/1u8h42h/google_search_using_playwright/",
+         "A new treg.to team starts with a dollar of prepaid balance and no card, which at these "
+         "rates is hundreds of searches rather than a fortnight of a trial. What that does not buy "
+         "you is a decision: the same dollar spread across three of these providers on your own "
+         "queries is a better answer than any table, and it is the experiment this page would "
+         "rather you ran."),
+        ("Every thread on this question is full of vendors",
+         "please be understandable and provide your take, examples and opinion, not just straight up promo bs",
+         "r/ProxyEngineering, 10 points", "https://www.reddit.com/r/ProxyEngineering/comments/1vrjmy7/what_are_some_good_serpapi_alternatives/",
+         "This page is one of those threads, so the only decent thing it can do is show its working. "
+         "Every price above is read from the provider's own rate card or documentation on the date "
+         "in the row, where a provider publishes no dollar price the row says so rather than "
+         "guessing, and any reliability figure comes from live treg.to traffic rather than a "
+         "benchmark we designed. What no comparison can tell you is which of these companies still "
+         "exists in eighteen months. Nobody selling you a table knows that either."),
+    ],
+    "q_cheapest": "Which SERP API is cheapest?",
+    "q_reliable": "Which SERP API is the most reliable?",
+    "q_compare": "How do the SERP APIs compare?",
+    "what_is_heading": "What is a SERP API?",
+    "what_is": (
+        "A SERP API returns what Google returns for one query, already parsed: the organic results "
+        "in order, with titles, URLs and snippets. You are not renting an index, you are paying for "
+        "one search run somewhere else on the parameters you send. That is why it is priced per "
+        "search rather than per month, and why the parameters that change what a person would have "
+        "seen, the location, the language, the device and how far down the page you go, are also "
+        "the parameters that change what you are billed."),
+    "notes": [
+        "The billing unit is not the same across these rows, so the cheapest number is not the "
+        "cheapest provider for your job. DataForSEO charges a flat rate per request but bills depth "
+        "in tens of results, and multiplies the price by five if you use advanced search operators. "
+        "Serpstat bills one credit per returned row and still bills the one credit minimum when the "
+        "result is empty. SerpApi bills per successful search and charges nothing for a failure or "
+        "for a repeat it serves from cache.",
+        "Semrush shows no dollar price here on purpose. It prices in API units, ten per line "
+        "returned, bought in packages up front, so a full top hundred pull is a thousand units and "
+        "what that costs depends on the package you bought rather than on a public per call rate. "
+        "The comparison prints a price only where the provider publishes one.",
+        "SerpApi appears in the catalog twice and the difference matters. Its light endpoint returns "
+        "a trimmed, faster payload for when you only want the ranking URLs, while its full endpoint "
+        "accepts the whole parameter surface, including an explicit location or coordinates, device, "
+        "the search vertical and a starting offset, which is what you need for city level results or "
+        "for anything past the first page.",
+    ],
+    "faq": [
+        ("How much does one Google search cost?",
+         "The provider's own rate with $0.000 added by treg.to, taken from a prepaid balance rather "
+         "than a subscription. The live figure per provider is in the comparison above, and the "
+         "units differ: one row bills the request, one bills each returned row, one bills only the "
+         "searches that succeed."),
+        ("Is this the same as Tavily, Exa or Firecrawl?",
+         "No, and conflating the two is the commonest mistake in the research behind this page. "
+         "Those return cleaned text for a model to read. These return the Google result set itself, "
+         "in position order, with the domains holding each slot. If the question is who ranks, you "
+         "need this kind; if the question is what is true, you probably do not."),
+        ("Why does reading the top 100 cost more than it used to?",
+         "Because Google stopped serving a hundred results on a single page, so what was one fetch "
+         "became ten. Providers pass that through as depth, as rows, or as separate searches, which "
+         "is why the depth or size parameter is the real cost dial on every row here."),
+        ("Can I get results for one city rather than the whole country?",
+         "Yes, on the rows that take it. SerpApi accepts a location string or explicit coordinates "
+         "with a radius, and DataForSEO accepts a location code or name. A national result set is "
+         "not a local one, so if you are checking a local pack you have to say where you are "
+         "standing."),
+    ],
+    "related": ("Keywords a domain ranks for", "Keyword volume, CPC and competition",
+                "Backlink profile of a domain", "How AI answers mention your brand"),
+}

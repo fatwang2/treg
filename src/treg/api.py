@@ -1104,6 +1104,22 @@ def _use_case_page_for(category: str, label: str) -> str | None:
     return None
 
 
+def _related_link(label: str, agent_slug: str) -> tuple[str, str]:
+    """(href, owning category) for a `related` job, resolved by LABEL across the whole menu.
+
+    Four categories carry fewer than five jobs, so `related` has to cross categories there. It used
+    to resolve inside the current page's category only, which sent those cards to the wrong anchor
+    under a caption naming the wrong category. The 66 labels are unique (tested), so the label is
+    enough to find the owner.
+    """
+    for category, jobs in agent_pages.USE_CASES:
+        for lbl, _ in jobs:
+            if lbl == label:
+                return (_use_case_page_for(category, label)
+                        or f"/agents/{agent_slug}#{agent_pages.category_slug(category)}"), category
+    return f"/agents/{agent_slug}", ""
+
+
 def _use_case_caps(category_slug: str, label: str) -> tuple[str, ...]:
     for category, jobs in agent_pages.USE_CASES:
         if agent_pages.category_slug(category) == category_slug:
@@ -1705,10 +1721,12 @@ async def use_case_job_page(request: Request, category: str, job: str,
                       if spec.get("voices") else "")
     notes = "".join(f'<h4>{_esc_html(x.split(".")[0])}.</h4><p>{_esc_html(x.split(".", 1)[1].strip())}</p>'
                     if "." in x else f"<p>{_esc_html(x)}</p>" for x in spec["notes"])
-    related = "".join(
-        f'<a class="card" href="{_use_case_page_for(cat_label, lbl) or ("/agents/" + agent_slug + "#" + agent_pages.category_slug(cat_label))}">'
-        f'<h4>{_esc_html(lbl)}</h4><p>Another job in {_esc_html(cat_label.lower())}.</p></a>'
-        for lbl in spec.get("related", ()))
+    def _related_card(lbl: str) -> str:
+        href, owner = _related_link(lbl, agent_slug)
+        return (f'<a class="card" href="{href}"><h4>{_esc_html(lbl)}</h4>'
+                f'<p>Another job in {_esc_html((owner or cat_label).lower())}.</p></a>')
+
+    related = "".join(_related_card(lbl) for lbl in spec.get("related", ()))
     faq_html = "".join(f'<h3>{_esc_html(q)}</h3><p>{_esc_html(a)}</p>' for q, a in spec["faq"])
 
     # The "instead of" anchor: what the same job costs on subscriptions from the providers on this
