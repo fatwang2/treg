@@ -1966,3 +1966,130 @@ USE_CASE_PAGES[("local-businesses-reviews", "find-local-businesses-by-keyword-an
     "related": ("A business's reviews", "Hotel listing details", "Product reviews",
                 "Your Google Business Profile reviews, and reply to them"),
 }
+
+
+USE_CASE_PAGES[("seo", "keywords-a-domain-ranks-for")] = {
+    "label": "Keywords a domain ranks for",
+    "sentence": "Rank tracking API: the keywords a domain ranks for",
+    "title": "Rank tracking API: {n} providers from {cheapest} | treg.to",
+    "lede": (
+        "Ask for a domain and get the keywords it already ranks for in Google, with the position it "
+        "holds and the volume behind each one. {n} providers do this through one treg.to key, from "
+        "{cheapest} a call, billed per call from a prepaid balance rather than an annual seat. It "
+        "works on any domain, which is exactly the question your own Search Console cannot answer."),
+    "prompt": "Using treg, get the top 200 keywords stripe.com ranks for in Google in the United "
+              "States, with position and monthly volume. Show me the price first, then group them "
+              "by position band.",
+    "prompt_why": [
+        ("Name the domain and the market", "A domain ranks differently in each country's index. Say which one, or you get the provider's default."),
+        ("Say how many keywords you want", "Row count is the cost dial on most of these rows. A limit you chose beats a default you did not."),
+        ("Ask for position and volume together", "Both arrive in the same row. Asking for them separately is two calls for one answer."),
+        ("Ask for the price first", "treg.to returns the cost before the call, so the agent can say what it will spend."),
+    ],
+    "result_noun": "keyword",
+    "result_image": None,
+    "voices_intro": (
+        "From eight searches across Reddit and X in August 2026, of which only about 13 posts were "
+        "both on topic and organic. Thirteen more were a single coordinated cluster promoting one "
+        "vendor across three small subreddits, seeding the question in one and answering it in "
+        "another, with non-breaking spaces left mid-sentence in the bodies. SEO is the most "
+        "astroturfed category this loop has researched, so the surviving posts are quoted and the "
+        "rest are only counted."),
+    "voices": [
+        ("The number people quote is the API tier, not the subscription",
+         "Don't really want to drop $14K to have access to the ahrefs API, so I'm hoping there are other, high-quality options",
+         "r/bigseo, 1 point", "https://www.reddit.com/r/bigseo/comments/1fyki5o/if_i_want_to_identify_ranking_keywords_for_a/",
+         "Worth quoting and then correcting, because the correction is the useful part. That figure "
+         "is an old enterprise tier and the research found it has since moved, so check the vendor's "
+         "current page rather than a thread. Then apply the same suspicion here: every price in the "
+         "comparison above carries the date it was read off the provider's own rate card or "
+         "documentation, because a price without a date is the thing that misled this reader."),
+        ("A subscription is the wrong instrument for uneven work",
+         "Semrush starts at $120/month. Ahrefs is up there too. For a bootstrapped operation that's a real cost",
+         "r/DigitalMarketing, 82 points", "https://www.reddit.com/r/DigitalMarketing/comments/1shurkl/replaced_semrush_with_the_gemini_api_and_search/",
+         "The objection in the research was almost never the total, it was the variance: a flat "
+         "monthly fee prices the quiet months wrong, and this work arrives in bursts. Every row "
+         "here is per call from a prepaid balance with no minimum and no commitment. The honest "
+         "trade is that you get an index and a raw response rather than a curated keyword universe "
+         "with a difficulty score on top, and the difference is your own development time."),
+        ("The databases disagree with each other and with your browser",
+         "Sometimes it works perfectly, other times it gives a completely different result to what we see if we visit Google in the browser",
+         "r/SEO, 7 points", "https://www.reddit.com/r/SEO/comments/1t8s9wq/rank_tracking_for_localised_results/",
+         "No comparison table can tell you whose index is right, and this one will not pretend to. "
+         "Nobody publishes a methodology, every accuracy claim is made by the vendor selling it, "
+         "and the phrase keywords a domain ranks for means a different keyword universe at each "
+         "provider before you compare a single position. The only honest offer is a procedure: run "
+         "the same fifty keywords through two of these for a week, diff both against your own "
+         "Search Console, and keep the one whose error is stable rather than the one whose number "
+         "is highest. At these prices that experiment costs less than a coffee."),
+        ("The people asking are already writing the script",
+         "I wanted to do some keyword research yesterday and was surprised by how expensive Ahrefs / Semrush were.",
+         "r/TechSEO, 36 points", "https://www.reddit.com/r/TechSEO/comments/1r7qifp/open_source_seo_tool_that_uses_your_own/",
+         "This post ends in an open source interface over a raw data API, and it was the most "
+         "common constructive answer in the research by some distance. That audience does not need "
+         "a feature grid, it needs the call, the response shape and the real per call price, which "
+         "is what the comparison above and the runnable call under it are for. The part nobody "
+         "warns them about is the unit: two of these rows bill the request and two bill the row."),
+        ("Ask for traffic and you may be handed a model's opinion",
+         "Tried DataForSEO but couldn't get the traffic endpoint working properly - they provide estimated traffic value instead of traffic.",
+         "r/Agentic_SEO, 12 points", "https://www.reddit.com/r/Agentic_SEO/comments/1u6avvw/any_cheap_api_for_url_traffic_estimates/",
+         "Fair criticism of a provider on this very page, and it generalises past that provider. "
+         "Position is close to observable, since somebody looked at a result page. Volume and "
+         "traffic are not: every vendor here derives them, none of them measures them, and the "
+         "numbers differ because the models differ. Treat position as data and traffic as an "
+         "opinion with a price on it, and the disagreements stop being surprising."),
+    ],
+    "q_cheapest": "Which ranked keywords API is cheapest?",
+    "q_reliable": "Which one is the most reliable?",
+    "q_compare": "How do the providers compare?",
+    "what_is_heading": "What is in a ranked keywords pull?",
+    "what_is": (
+        "One row per keyword the domain appears for in the provider's index of Google: the keyword, "
+        "the position it holds, the search volume behind it and usually a cost per click and a "
+        "landing URL. It is a snapshot taken from an index that vendor already maintains, not a "
+        "live search run for you, which is why it can return thousands of rows for the price of one "
+        "request and why two vendors will hand you different lists for the same domain."),
+    "notes": [
+        "The billing unit changes per row and it changes which one is cheapest for you. DataForSEO "
+        "charges per request plus a fraction of a cent for each keyword returned. SE Ranking charges "
+        "a flat hundred credits per request and nothing per record, so one page of a thousand rows "
+        "costs a fraction of ten pages of a hundred. Serpstat charges a credit per keyword and bills "
+        "its one credit minimum even when nothing comes back. Read the unit column before the price "
+        "column.",
+        "SpyFu's figure here is the top of a published band rather than a quoted rate. Its pricing "
+        "table gives a range per thousand rows across the research endpoints and does not say which "
+        "tier this one sits in, so the catalog carries the upper bound instead of guessing low. Read "
+        "that row as a ceiling and the others as rates. Its page size also defaults to five, so set "
+        "it explicitly or the call returns almost nothing.",
+        "Semrush shows no dollar figure, and that is the honest thing to print. It bills in API "
+        "units bought in packages up front, ten per line returned, so what a pull costs depends on "
+        "the package you hold rather than on any public per call rate. A default request there "
+        "returns ten thousand lines, which is a hundred thousand units, so send a display limit "
+        "before you send anything else.",
+    ],
+    "faq": [
+        ("Is this rank tracking?",
+         "Not in the sense of a tracker you configure and leave running. These return the keywords a "
+         "domain ranks for right now, from each vendor's index, in one call. Nothing here schedules "
+         "itself, keeps a history for you or alerts you to a drop; if you want positions over time "
+         "you run the call on your own schedule and store the results. treg.to has no scheduled rank "
+         "tracker on the menu, and saying so is more useful than a near miss."),
+        ("How much does one domain pull cost?",
+         "A cent or two per request on the rows that bill the request, and a fraction of a cent per "
+         "keyword on the rows that bill the row, at the provider's own rate with $0.000 added by "
+         "treg.to. The comparison above prints both, and which is cheaper depends entirely on how "
+         "many keywords you ask for."),
+        ("Why do the providers disagree about the same domain?",
+         "Because each one is answering from its own index, built by its own crawl on its own "
+         "schedule, and the phrase keywords a domain ranks for is a keyword universe that differs "
+         "before a single position is compared. No table settles this. Running two of them against "
+         "your own Search Console for a week does."),
+        ("Can I do this for a competitor's domain?",
+         "Yes, and that is the point. Search Console is ground truth for sites you own and silent "
+         "about everybody else, so a competitor's ranked keywords have no first party source at all. "
+         "The target is just a domain on every row here, which is why this job exists as something "
+         "you pay for."),
+    ],
+    "related": ("Google results for a keyword", "Keyword volume, CPC and competition",
+                "Backlink profile of a domain", "Keywords a domain bids on"),
+}
