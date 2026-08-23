@@ -1481,3 +1481,453 @@ USE_CASE_PAGES[("youtube-video", "a-video-s-comments")] = {
     "related": ("Get a video's transcript", "Video details, views and stats",
                 "Mine the comments", "A channel's profile and lifetime stats"),
 }
+
+USE_CASE_PAGES[("seo", "google-serp-api")] = {
+    "label": "Google results for a keyword",
+    "sentence": "Google SERP API: the live results for a keyword, without running the scraper",
+    "title": "Google SERP API: {n} providers compared | treg.to",
+    "lede": (
+        "Ask for a keyword and get back what Google returns: positions, titles, URLs, snippets and "
+        "the SERP features around them. {n} providers do this through one treg.to key, and the "
+        "cheapest is not simply the best deal. Two of them are not scraping Google at all, they are "
+        "replaying their own last crawl, which is a different product at a different price."),
+    "prompt": "Using treg, get the top 20 Google results for \"email finder api\" in the US. Show me "
+              "the price first, use a live provider rather than a cached database, and give me "
+              "position, title, URL and snippet.",
+    "prompt_why": [
+        ("Say live or cached", "Two providers answer from their own crawl. Cheap, but not today's SERP."),
+        ("Name the location", "Results differ by country and city. Unspecified means someone else's Google."),
+        ("Cap the depth", "Per-result billing makes a top-100 pull fifty times a top-10 pull."),
+        ("Ask for the price first", "The spread here is 30x, so the price decides the provider more than usual."),
+    ],
+    "result_noun": "search",
+    "result_image": None,
+    "what_is_heading": "What is a SERP API?",
+    "what_is": (
+        "A SERP API returns Google's results page as structured data: the organic positions with "
+        "their titles, URLs and snippets, and usually the features around them such as the local "
+        "pack, People Also Ask, related searches and the knowledge panel. It exists because Google "
+        "has no public search API, and because scraping it yourself means proxies, CAPTCHAs and a "
+        "parser that breaks whenever the layout moves."),
+    "notes": [
+        "Two of these five are not live. Serpstat and Semrush answer from their own database, the "
+        "last time they crawled that keyword in that regional index. That is why Serpstat costs a "
+        "twentieth of a live call, and it is the right choice for a broad historical view and the "
+        "wrong one for checking what ranks this morning.",
+        "The billing units are not comparable. DataForSEO and ScrapeCreators charge about $0.002 a "
+        "request no matter how many rows come back; Serpstat charges per row returned, so `size` is "
+        "the price dial and an empty result still bills its one-credit minimum; Semrush charges ten "
+        "API units per line, so a full top-100 pull is a thousand units.",
+        "SerpApi is the dearest per search and the only one that does not charge for a failure: "
+        "failed and cached searches are free, and one response carries the knowledge graph, local "
+        "results, People Also Ask and related searches alongside the organic list. You are paying "
+        "for the extra surfaces, not for better positions.",
+    ],
+    "faq": [
+        ("Why not just scrape Google myself?",
+         "You can, and people do until the CAPTCHAs start. What you are buying here is somebody "
+         "else's proxy pool and parser: the request goes out on their infrastructure, so your IP "
+         "never appears and a layout change is their problem to fix."),
+        ("Are these results the same as what I see in my browser?",
+         "Close, not identical. Google personalises by location, language and history. The live "
+         "providers here take a location and language so you can pin those two; the database "
+         "providers return their crawl of that keyword in that regional index instead."),
+        ("How much does one search cost?",
+         "From a fifth of a cent to about a cent and a half, depending on the provider and whether "
+         "you are billed per request or per row. The comparison below shows both, at the provider's "
+         "own rate with $0.000 added by treg.to."),
+        ("Which one should I use?",
+         "If you need today's SERP, a live provider. If you need many keywords cheaply and can "
+         "accept a recent crawl, a database provider. treg.to shows both and the agent picks, or "
+         "you say which."),
+    ],
+    "voices_intro": (
+        "Everyone here started by scraping Google themselves. From ~225 Reddit and X posts in "
+        "August 2026, with vendor content and a large amount of keyword-match noise removed, these "
+        "are the things that made them stop."),
+    "voices": [
+        ("The CAPTCHAs start almost immediately",
+         "Earlier I trialed with requests and curl-cffi to scrape google, specifically Google Jobs, and it doesnt seem to work as there are always captchas",
+         "r/WebScrapingInsider", "https://www.reddit.com/r/WebScrapingInsider/comments/1vdfduv/google_search_scraping_insight_needed/",
+         "This is the whole product. Every provider here absorbs the proxy pool and the challenge "
+         "solving, so the useful comparison is price per successful search and measured success "
+         "rate, not who claims to beat Google."),
+        ("The parser breaks whenever Google reshuffles the page",
+         "How do we even scrape for the fields when the CSS class name changes all the time.",
+         "r/WebScrapingInsider", "https://www.reddit.com/r/WebScrapingInsider/comments/1vdfduv/google_search_scraping_insight_needed/",
+         "Worth knowing what you are buying: these providers return parsed fields, so a layout "
+         "change is their maintenance rather than yours. The failure mode moves from your code "
+         "breaking to their coverage quietly changing."),
+        ("Google removed the hundred-results parameter and multiplied everyone's cost",
+         "The removal created a 10x increase in the workload for data collection.",
+         "r/AgentsOfAI, 202 points", "https://www.reddit.com/r/AgentsOfAI/comments/1nxut66/google_trying_to_retain_its_search_engine_monopoly/",
+         "The highest-scoring genuine complaint in the whole sample, and it is a pricing question "
+         "now: ask whether a hundred results is one call or ten at each provider before you plan a "
+         "job around depth."),
+        ("Free tiers run out faster than the number on the page suggests",
+         "Burned an afternoon confused about why I was getting quota errors well under my \u201c1,000 free/month\u201d",
+         "r/n8n", "https://www.reddit.com/r/n8n/comments/1vo2dto/i_built_a_free_leadgen_pipeline_that_scrapes/",
+         "A monthly allowance usually hides a stricter daily and per-second cap. Metered per-call "
+         "pricing has no tier to misread: you spend a fraction of a cent and see it, which is a "
+         "different failure mode rather than no failure mode."),
+    ],
+    "related": ("Keywords a domain ranks for", "Keyword volume, CPC and competition",
+                "Backlink profile of a domain", "How AI answers mention your brand"),
+}
+
+USE_CASE_PAGES[("seo", "check-keyword-rankings")] = {
+    "label": "Keywords a domain ranks for",
+    "sentence": "Check keyword rankings: every term a domain ranks for, with position and volume",
+    "title": "Check keyword rankings: {n} rank-tracking APIs compared | treg.to",
+    "lede": (
+        "Give your agent a domain and get back the keywords it ranks for, each with its position, "
+        "search volume and the URL that ranks. {n} providers do this through one treg.to key. They "
+        "disagree with each other, and they bill in four different shapes, so the cheapest depends "
+        "entirely on how many rows you pull per request."),
+    "prompt": "Using treg, list the keywords treg.to ranks for in the US, positions 5 to 30, with "
+              "search volume and the ranking URL. Show me the price first and cap it at 200 rows.",
+    "prompt_why": [
+        ("Give a domain, not a URL", "Most of these take either, and the domain gets the full picture."),
+        ("Ask for a position band", "Positions 5 to 30 is the striking distance where work pays off."),
+        ("Set the row cap yourself", "Two providers bill per row and default to 100. Say what you want."),
+        ("Pull big pages where rows are free", "SE Ranking bills the request, not the row, so one page of 1,000 beats ten of 100."),
+    ],
+    "result_noun": "keyword",
+    "result_image": None,
+    "what_is_heading": "What is rank tracking data, and where does it come from?",
+    "what_is": (
+        "A ranked-keywords endpoint returns the terms a domain already appears for in Google's top "
+        "100, with the position, the ranking URL and usually the search volume and estimated "
+        "traffic. It comes from the provider's own periodic crawl of a large keyword set, not from "
+        "a live search, which is why two providers rarely return the same list for the same domain."),
+    "notes": [
+        "Four billing shapes, one job. SE Ranking charges 100 credits per request and nothing per "
+        "row, so pull a thousand rows in one page. Serpstat charges one credit per row returned and "
+        "still bills a minimum on an empty result, so set `size` deliberately. DataForSEO charges "
+        "both: a cent and a fifth per request plus a hundredth of a cent per keyword. SpyFu bills "
+        "per row on a CPM tier.",
+        "They will not agree, and the disagreement is not a bug. Each provider ranks a domain "
+        "against its own crawled keyword universe, so a term one has tracked for years is a term "
+        "another has never checked. Use one provider for trend over time and a live SERP call to "
+        "confirm anything you are about to act on.",
+        "Semrush is priced in API units rather than dollars, at ten units per line returned and "
+        "fifty for historical rows. Units are bought in packages, so there is no per-call dollar "
+        "figure to compare; the page shows the others in dollars and leaves Semrush in its own unit "
+        "rather than inventing a conversion.",
+    ],
+    "faq": [
+        ("Why do two tools show different rankings for my site?",
+         "Because neither is looking at your Google. Each returns the position it recorded in its "
+         "own last crawl of that keyword, in that regional index, without your location or history. "
+         "Treat them as a consistent yardstick over time, not as ground truth for today."),
+        ("Can I check one specific keyword's position?",
+         "That is a different job and a live one: use the SERP endpoint for the keyword and read "
+         "where the domain appears. This job answers the other direction, everything a domain "
+         "ranks for."),
+        ("How do I keep the cost down?",
+         "Match the page size to the billing shape. Where rows are free, pull large pages; where "
+         "rows are metered, ask for exactly the band you need. The comparison below marks which is "
+         "which."),
+        ("Do I need a Semrush or Ahrefs subscription?",
+         "No. treg.to calls these on its own keys and bills per call from a prepaid balance. If you "
+         "already pay one of them, register that key and those calls are never metered."),
+    ],
+    "voices_intro": (
+        "The complaints here are not about accuracy, which surprised us. They are about doing it by "
+        "hand, and about not being able to compare what a provider charges for. From ~225 Reddit "
+        "and X posts in August 2026, vendor content removed."),
+    "voices": [
+        ("Checking by country is a manual VPN loop",
+         "In my current organization, we're following a very manual process to check keyword rankings in different countries.",
+         "r/digital_marketing", "https://www.reddit.com/r/digital_marketing/comments/1sj5006/is_there_a_better_way_to_track_keyword_rankings/",
+         "Location is a parameter on every provider here, so the loop collapses into one call per "
+         "market. Check the granularity you actually need before choosing: country, city and "
+         "postcode are not equally supported."),
+        ("Doing it for several sites stops scaling",
+         "I manage SEO for multiple websites, so manually checking rankings is becoming a bit time-consuming.",
+         "r/digital_marketing", "https://www.reddit.com/r/digital_marketing/comments/1vtfqc8/is_there_any_tool_to_check_keyword_rankings/",
+         "This is the case for calling it rather than clicking it. One prompt over a list of "
+         "domains, priced per row or per request, and no seat per site."),
+        ("The rank data never joins the rest of it",
+         "Most tools I've tested still feel very siloed.",
+         "r/SEO_tools_reviews", "https://www.reddit.com/r/SEO_tools_reviews/comments/1td2uzc/do_any_ai_seo_tools_actually_use_ga4_gsc_rankings/",
+         "None of these five merges rank data with Search Console or GA4 for you, and we are not "
+         "going to pretend otherwise. What treg.to changes is that all three answer the same key, "
+         "so the join is your agent's job rather than an export and a spreadsheet."),
+        ("Nobody can tell what a run will cost before committing",
+         "I know the cost, but I don't know how long the algho will scrap all the necessary data",
+         "r/ChatGPTPro", "https://www.reddit.com/r/ChatGPTPro/comments/1o0e8g1/building_a_chatgptpowered_seo_assistant_w_se/",
+         "Half answerable. The price of a run is arithmetic once you know the billing shape, and "
+         "this page publishes it. Wall-clock time for a very large daily job is not something any "
+         "vendor publishes, and we have not measured it."),
+    ],
+    "related": ("Google results for a keyword", "Keyword volume, CPC and competition",
+                "Backlink profile of a domain", "Keywords a domain bids on"),
+}
+
+USE_CASE_PAGES[("advertising", "own-campaign-performance")] = {
+    "label": "Your own campaign performance",
+    "sentence": "Google Ads API and Meta Ads API: your own campaign numbers, read by your agent",
+    "title": "Google Ads API and Meta Ads API for {agent} | treg.to",
+    "lede": (
+        "Connect the ad accounts you already own and your agent can read them: spend, impressions, "
+        "clicks, conversions, by campaign and by day. Both run on your own account through treg.to, "
+        "so there is nothing to meter and nothing to pay. What you are avoiding is the developer "
+        "token, the OAuth dance and the query language, once for each platform."),
+    "prompt": "Using treg, pull last week's Google Ads and Meta Ads campaign performance side by "
+              "side: spend, clicks, conversions and cost per conversion, and tell me which campaigns "
+              "got worse against the week before.",
+    "prompt_why": [
+        ("Connect once, per platform", "One OAuth click each. treg.to holds the tokens, not you."),
+        ("Ask across both at once", "The agent normalises two very different response shapes for you."),
+        ("Name the window and the grain", "By campaign, by day, last 7 days. Otherwise you get a shape you did not want."),
+        ("It costs nothing", "Your own accounts, so treg.to meters nothing."),
+    ],
+    "result_noun": "report",
+    "result_image": None,
+    "what_is_heading": "What do these APIs actually return?",
+    "what_is": (
+        "The Google Ads API answers a query language called GAQL over your account's own resources: "
+        "you select fields, segments and metrics from a campaign, ad group or keyword and it "
+        "streams back rows. The Meta Marketing API's insights endpoint returns the same kind of "
+        "data for a Facebook or Instagram ad account, with breakdowns as a parameter rather than "
+        "part of a query. Both are the numbers the UI shows, without the UI."),
+    "notes": [
+        "The wall is getting access, not making the call. Google Ads standard access is an "
+        "application that people report waiting weeks on, and the API Center is only exposed on "
+        "manager accounts; Meta wants a live app with business verification. treg.to holds the "
+        "developer token and the app registration, so what you connect is the account, not a "
+        "developer relationship you have to earn first.",
+        "Meta does not return conversions as a top-level field. They arrive inside an `actions` "
+        "array as objects of the form {action_type, value}, and you pick the action type that "
+        "matches the campaign's objective. An agent that reports zero conversions has almost always "
+        "read the wrong key rather than found a real zero.",
+        "Neither call costs money, but both cost quota. Google Ads counts against the developer "
+        "token's daily operation limit, which is 15,000 operations a day on Basic access. Meta's "
+        "wide breakdowns eat the ad account's rate-limit budget quickly, so ask for the breakdown "
+        "you need rather than every dimension.",
+    ],
+    "faq": [
+        ("Does this cost anything?",
+         "No. Both accounts are yours, so treg.to relays the call and meters nothing. Only calls on "
+         "treg.to's own provider keys are billed."),
+        ("Do I need a Google Ads developer token?",
+         "treg.to handles the developer token and the OAuth flow. You connect the Google account "
+         "that already has access to the ad account, once."),
+        ("Can it change my campaigns, or only read them?",
+         "Reading is what this job covers. The catalog also carries budget updates and other write "
+         "operations on Google Ads, which are separate endpoints you would have to ask for by name."),
+        ("Why are my Meta conversions zero?",
+         "Almost always because they were read from the wrong place. Conversions live inside the "
+         "`actions` array keyed by action type, not as a top-level metric."),
+    ],
+    "voices_intro": (
+        "We expected the complaints to be about query languages and rate limits. From ~225 Reddit "
+        "and X posts in August 2026, not one mentions those. The pain is getting approved at all, "
+        "and a worry about what the platforms do when they notice an agent."),
+    "voices": [
+        ("Getting approved is the wall",
+         "who can help a portco with Google Ads API standard access? Been stuck for weeks now.",
+         "@TheHolyKau on X", "https://x.com/i/status/2087116221204615661",
+         "This is the friction treg.to removes: the developer token and the app registration are "
+         "ours, so you connect the ad account with one OAuth click and call it the same day."),
+        ("Every platform wants a verified business before it will talk to you",
+         "the API approval for those (especially meta and tiktok) looks like it needs a live app with actual traffic and business verification",
+         "r/SaaS", "https://www.reddit.com/r/SaaS/comments/1uqrsow/building_a_reporting_tool_for_agencies_stuck_on/",
+         "Accurate, and the reason most people give up before the first call. You are connecting an "
+         "account to an app that already cleared that bar."),
+        ("Advertisers are nervous about wiring an agent to Meta",
+         "Lots of people report that accounts shut down after connecting external AI agents, like Claude, directly to Ads Manager via API.",
+         "r/FacebookAds", "https://www.reddit.com/r/FacebookAds/comments/1ryu8wk/advertisers_are_reporting_meta_ad_accounts/",
+         "Worth reading before you connect anything, and we will not wave it away. treg.to reads "
+         "the official Marketing API with your own OAuth grant, which is the sanctioned path rather "
+         "than automating the Ads Manager interface, but we cannot speak for Meta's enforcement and "
+         "nobody should promise you otherwise. If your account matters, read Meta's current "
+         "guidance and start read-only."),
+        ("The weekly report is still assembled by hand",
+         "I basically don't open Google Ads or Meta Ads Manager anymore.",
+         "r/ClaudeAI", "https://www.reddit.com/r/ClaudeAI/comments/1sghz8n/how_i_run_google_ads_and_meta_for_multiple/",
+         "This is the outcome the page is for, and the honest version of the claim: both ad "
+         "platforms, plus Search Console and Google Analytics, answer the same token, so the "
+         "assembly step is a prompt instead of four exports."),
+    ],
+    "related": ("Ads a competitor is running now", "Keywords a domain bids on",
+                "Google Analytics: traffic and behaviour reports",
+                "Search Console: clicks, impressions and top queries"),
+}
+
+USE_CASE_PAGES[("e-commerce", "amazon-product-data")] = {
+    "label": "Amazon product detail by ASIN",
+    "sentence": "Amazon product API: title, price, rating and images from an ASIN",
+    "title": "Amazon product API: {n} providers compared | treg.to",
+    "lede": (
+        "Give your agent an ASIN and get the product back as data: title, brand, current price, "
+        "rating and review count, images, and the attributes Amazon shows on the page. {n} "
+        "providers do this through one treg.to key, and the cheapest is a tenth of the dearest for "
+        "what is largely the same record."),
+    "prompt": "Using treg, pull these 15 ASINs into a table: title, brand, current price, rating "
+              "and review count. Show me the price of the calls first and use the cheapest provider "
+              "that returns a price.",
+    "prompt_why": [
+        ("One ASIN is one record", "Every provider here bills per product, so the list length is the bill."),
+        ("Name the marketplace", "An ASIN's price and availability differ between amazon.com and amazon.co.uk."),
+        ("Ask for a table", "The raw records are wide. Say which fields you want and get a table."),
+        ("Ask what a miss costs", "One provider bills only on success, so a dead ASIN is free."),
+    ],
+    "result_noun": "product",
+    "result_image": None,
+    "what_is_heading": "What is an Amazon product API?",
+    "what_is": (
+        "It turns an ASIN, Amazon's ten-character product identifier, into the structured record "
+        "behind the product page: title, brand, price, availability, rating, review count, images "
+        "and category. Amazon's own Product Advertising API requires an affiliate account in good "
+        "standing with qualifying sales, which is why most people reach for a data provider instead."),
+    "notes": [
+        "The price range is real and the records are close. Bright Data delivers at about $1.50 per "
+        "thousand records, JustOneAPI at about a cent and a half per successful call, SerpApi at a "
+        "cent and a half per search. For a straight ASIN lookup the cheap end is the obvious "
+        "starting point; the dearer ones bundle other Amazon surfaces you may or may not need.",
+        "JustOneAPI bills only on success: an error code returns free, so a list with dead ASINs in "
+        "it costs you only the live ones. Bright Data is also pay-per-success at the delivery step. "
+        "That matters more than the headline rate when you are working from a scraped ASIN list.",
+        "Prices move and these are snapshots. Amazon changes price and availability through the "
+        "day, so a record is true at the moment of the call. For price tracking, call on a schedule "
+        "and keep the series yourself; none of these providers keeps a history for you.",
+    ],
+    "faq": [
+        ("Why not use Amazon's own API?",
+         "The Product Advertising API is open to Associates with qualifying sales, and it drops you "
+         "if the sales stop. These providers do not require an affiliate relationship."),
+        ("Can I search Amazon, not just look up an ASIN?",
+         "Yes, that is a neighbouring job in the catalog: keyword search and best sellers by "
+         "category, on the same shelf."),
+        ("Do I get reviews?",
+         "The record carries the rating and the review count. The review text is a separate "
+         "endpoint on the same shelf."),
+        ("Which marketplace do I get?",
+         "Whichever you ask for. Most of these take a domain or country parameter, and the price "
+         "you get back is that marketplace's price."),
+    ],
+    "voices_intro": (
+        "Most of what is written about Amazon data is written by the people selling scrapers: 9 of "
+        "the 16 relevant posts in this corpus were vendor content, and every one of them opens on "
+        "CAPTCHAs. These four are from people who actually hit the wall."),
+    "voices": [
+        ("The agent cannot reach Amazon on its own",
+         "You cannot use Chatgpt to search Amazon products - it won't even open links",
+         "r/OpenAI, 51 points", "https://www.reddit.com/r/OpenAI/comments/1ph2nul/you_cannot_use_chatgpt_to_search_amazon_products/",
+         "This is the whole reason the job exists. Amazon blocks the assistant's fetch, and the "
+         "poster reports it inventing a Walmart product rather than admitting so. Handing the agent "
+         "a data provider replaces a guess with a record."),
+        ("The official API is gated behind sales you may not have",
+         "I applied for the official Amazon Product Advertising API (PA-API), got my keys, but for some reason, they never actually granted me functional access.",
+         "r/developersIndia, 107 points", "https://www.reddit.com/r/developersIndia/comments/1q4i0l8/amazon_denied_my_api_access_so_i_built_my_own/",
+         "PA-API wants an Associates account with qualifying sales and can sit inert indefinitely. "
+         "None of the three providers here need any relationship with Amazon."),
+        ("Rolling your own means the proxy work never ends",
+         "My residential proxies keep getting flagged halfway through, so I end up with an incomplete dataset and no clear list of failed ASINs.",
+         "r/thewebscrapingclub", "https://www.reddit.com/r/thewebscrapingclub/comments/1uyv5m8/for_amazon_product_data_is_a_managed_scraping_api/",
+         "Two of these three bill only on success, which turns his second problem into an accounting "
+         "one: the rows you were charged for are the rows you got. Compare on price per successful "
+         "call rather than on who claims to beat Amazon."),
+        ("Reviews stop at the first page",
+         "Best API to get ALL Amazon reviews (not just first 10)?",
+         "r/scrapingtheweb", "https://www.reddit.com/r/scrapingtheweb/comments/1rprbkf/best_api_to_get_all_amazon_reviews_not_just_first/",
+         "Fair warning about this page's scope: the product record carries the rating and the review "
+         "count, not the review text. Review depth is a separate endpoint and the providers diverge "
+         "sharply on how far back they will page."),
+    ],
+    "related": ("Amazon search and best sellers", "TikTok Shop products and reviews",
+                "Product reviews", "App store search"),
+}
+
+USE_CASE_PAGES[("local-businesses-reviews", "find-local-businesses")] = {
+    "label": "Find local businesses by keyword and location",
+    "sentence": "Local business data API: find businesses by keyword and location, with ratings",
+    "title": "Local business data API: Yelp and TripAdvisor compared | treg.to",
+    "lede": (
+        "Ask for a category and a place and get back the businesses: name, address, phone, rating "
+        "and review count, ready for your agent to filter. Two platforms answer this through one "
+        "treg.to key, and they are not alternatives to each other. Yelp knows the neighbourhood "
+        "restaurant; TripAdvisor knows the hotel and the attraction."),
+    "prompt": "Using treg, find 25 plumbers in Austin, Texas with a rating of 4 or better. Show me "
+              "the price first, then give me name, phone, address, rating and review count.",
+    "prompt_why": [
+        ("Pick the platform for the category", "Yelp for local services, TripAdvisor for hospitality and travel."),
+        ("Give a real location string", "City and state, not a bounding box. These are consumer indexes."),
+        ("Filter on what comes back", "Rating and review-count thresholds are your filter, not a search parameter."),
+        ("Ask for the price first", "The two platforms here differ by twenty times per call."),
+    ],
+    "result_noun": "listing",
+    "result_image": None,
+    "what_is_heading": "What is local business data, and what is in a record?",
+    "what_is": (
+        "A local business record is what a consumer directory holds about a place: name, category, "
+        "street address, phone, website, opening hours, rating and review count, and usually a "
+        "stable id you can use to pull the reviews themselves. It is the raw material for local "
+        "lead lists, competitive research on a neighbourhood, and any agent that needs to know what "
+        "is actually there."),
+    "notes": [
+        "These two indexes cover different worlds and the choice is the category, not the price. "
+        "Yelp is the deeper index for local services and restaurants in North America; TripAdvisor "
+        "is the deeper one for hotels, attractions and travel, worldwide. Searching the wrong one "
+        "returns a short, misleading list rather than an error.",
+        "The prices are twenty times apart because the shapes differ. The TripAdvisor route is a "
+        "task-post: you submit the search and read the results back, at a fraction of a cent. The "
+        "Yelp route answers in the same request at about a cent and a half. Interactive work wants "
+        "the synchronous one; a batch of a thousand searches does not.",
+        "Neither returns an email address. Local records carry a phone and a website, and turning "
+        "that website into a named contact is the enrichment job on the neighbouring page. Say so "
+        "in the prompt if that is where you are heading.",
+    ],
+    "faq": [
+        ("Can I get the reviews too?",
+         "Yes, as a second call. This job finds the businesses; reading a business's reviews is the "
+         "neighbouring job, on Yelp, TripAdvisor or Trustpilot."),
+        ("Is Google Maps data here?",
+         "The catalog carries Google's local pack through its SERP providers and the Google "
+         "Business Profile API for listings you own. This page covers the two consumer directories "
+         "that answer a keyword-and-place search directly."),
+        ("Can I use this to build a lead list?",
+         "That is the common use. You get the business, the phone and the website; resolving a "
+         "named contact and an email address is the enrichment step after it."),
+        ("How current is the data?",
+         "It is the directory's current listing, which is as current as the business keeps it. "
+         "Ratings and review counts move daily; hours and phone numbers go stale quietly."),
+    ],
+    "voices_intro": (
+        "Local data has a specific trap: the record comes back and the field you actually wanted is "
+        "not in it. From ~45 Reddit and X posts in August 2026, almost all of which turned out to be "
+        "vendor astroturf (three separate rings, two sharing the same preview image), these are the "
+        "two build logs with first-hand detail."),
+    "voices": [
+        ("The record has no email in it, on any of them",
+         "Google's Places API doesn't give you email addresses. At all.",
+         "r/n8n", "https://www.reddit.com/r/n8n/comments/1vo2dto/i_built_a_free_leadgen_pipeline_that_scrapes/",
+         "True of every directory here too, and worth saying before you build on one. A local record "
+         "gives you the phone and the website; turning that website into a named person with an "
+         "address is the enrichment job on the next page, and its realistic hit rate is well short "
+         "of one for one."),
+        ("The phone number is the front desk, not the owner",
+         "The issue I'm running into is that most tools (Google Maps, etc.) only give me the public front-desk phone number.",
+         "r/ClaudeCowork", "https://www.reddit.com/r/ClaudeCowork/comments/1uxezdz/what_are_you_using_to_scrape_local_business/",
+         "No local directory solves this, because the listed number is the number the business "
+         "published. Finding a decision maker is a different product: company enrichment to get the "
+         "org, then people search for the role."),
+        ("Falling back to the business's own website mostly fails",
+         "~70% of small business sites fetched came back 403.",
+         "r/n8n", "https://www.reddit.com/r/n8n/comments/1vo2dto/i_built_a_free_leadgen_pipeline_that_scrapes/",
+         "That rate is a property of the sites, not of the provider, and no vendor removes it. If "
+         "you plan to scrape the listed website as a second step, budget for keeping roughly a "
+         "third of the rows, and use a scraping provider that solves the challenge rather than a "
+         "plain fetch."),
+        ("The fields you need sit in a different price tier",
+         "Fields like phone and website live in a totally different pricing tier (Enterprise) than name/address (Essentials/Pro)",
+         "r/n8n", "https://www.reddit.com/r/n8n/comments/1vo2dto/i_built_a_free_leadgen_pipeline_that_scrapes/",
+         "That is Google Places, and it is the reason this page compares the two consumer "
+         "directories instead: both return the phone, the rating and the review count in the same "
+         "record, at one price per search."),
+    ],
+    "related": ("A business's reviews", "Enrich a company from its domain",
+                "Find professional emails", "Your Google Business Profile reviews, and reply to them"),
+}
