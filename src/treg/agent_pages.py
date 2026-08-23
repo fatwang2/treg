@@ -1916,6 +1916,9 @@ USE_CASE_PAGES[("local-businesses-reviews", "find-local-businesses-by-keyword-an
          "front desk is a second step against the business's own site, and it is the step with a "
          "hard floor."),
     ],
+    # Not "which is cheapest": one provider per platform, so ranking the two rows against each
+    # other would compare a Yelp search with a Tripadvisor one. The heading makes it a price list.
+    "q_cheapest": "What does each source cost?",
     "q_compare": "How do the two sources compare?",
     "what_is_heading": "What does a local business search return?",
     "what_is": (

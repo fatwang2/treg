@@ -320,13 +320,35 @@ requires `voices` and `voices_intro` together rather than requiring either.
 say it anyway. Write position-neutral ("the comparison above", "the prices here") or the sentence
 is wrong for every reader who scrolls.
 
-**Written so far: 12 of the 66 jobs.** The YouTube & video cluster (transcript, video stats, channel
-stats, search, comments) landed 2026-08-21 and is the first `compare`-form cluster where one row is
+**Written so far: 17 of the 66 jobs**, and from 2026-08-24 the remaining set is no longer "all of
+them". Every unwritten job was measured against Google Ads keyword volume that day; the ones
+clearing 50 US searches a month became a worklist ordered by volume, and the rest are parked as
+rows on the menu with no page. A page nobody searches for is the scaled-content shape the risk
+audit says to avoid, so the loop writes demand first and the remainder is a decision rather than a
+backlog.
+
+The YouTube & video cluster (transcript, video stats, channel stats, search, comments) landed
+2026-08-21 and is the first `compare`-form cluster where one row is
 free: the official Data API on the reader's own connected Google account, at $0.00 with a 10,000
 unit daily quota. The free row is deliberately excluded from the "cheapest per unit" claim, because
 `_uc_providers` only ranks rows with a truthy USD price, and a free-but-rationed row is not a
 cheaper version of a metered one. Those pages carry the quota arithmetic instead, which is what the
 research said people actually get stuck on.
+
+**A `related` card resolves by label, not inside the current category.** Four categories carry
+fewer than five jobs (advertising and market research three, e-commerce and local businesses four),
+so their pages have to point at least one of their four cards outside the category. The card used to
+look the label up in the current page's category and, on a miss, fall back to that category's anchor
+under a caption naming that category: a wrong link nothing failed on, because the test only asks
+whether the label exists somewhere on the menu. The 66 labels are unique, so `_related_link` finds
+the owner from the label alone.
+
+**A row with no dollar price is not a free row.** The price cell had one `else` branch and it read
+"free, your own account" in green. Semrush prices both SERP jobs in API units bought up front, so
+its `cost_view` carries no USD and the page labelled the dearest option on it as free on the
+reader's own account. Free is now read off the cost's own `type`; anything else without a figure
+prints "no dollar rate published", which is what the pages say about Semrush in prose too. It was
+found by reading the rendered page, which is the argument for that step in the skill.
 
 Nested under the category on purpose: the five flat ad pages keep their URLs and `build_html.py`
 ownership, and `test_legacy_flat_use_case_pages_still_answer` proves the nested route cannot shadow
