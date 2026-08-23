@@ -1721,3 +1721,125 @@ USE_CASE_PAGES[("advertising", "your-own-campaign-performance")] = {
                 "Google Ads: the search terms triggering your ads",
                 "Search Console: clicks, impressions and top queries"),
 }
+
+
+USE_CASE_PAGES[("e-commerce", "amazon-product-detail-by-asin")] = {
+    "label": "Amazon product detail by ASIN",
+    "sentence": "Amazon product API: any product's detail by ASIN",
+    "title": "Amazon product API: {n} providers from {cheapest} | treg.to",
+    "lede": (
+        "Give your agent an ASIN and get the listing back as data: title, current price, images, "
+        "specifications and the review summary. {n} providers do this through one treg.to key, from "
+        "{cheapest} a product, with no Amazon programme to be approved for first. That last part is "
+        "most of the reason this job has a price at all."),
+    "prompt": "Using treg, get the Amazon product detail for ASIN B08N5WRWNW on amazon.com. Show me "
+              "the price first, then give me the title, current price, rating and review count.",
+    "prompt_why": [
+        ("Give it the ASIN and the marketplace", "One ASIN is a different listing and a different price on each Amazon domain. Name the one you mean."),
+        ("Ask for the price first", "treg.to returns the cost before the call, so the agent can say what it will spend."),
+        ("Name the fields you want back", "A product payload is large. Saying which fields matter keeps the answer short and the context small."),
+        ("Say what to do on a miss", "Dead and region locked ASINs are normal in any list. Tell it to skip and report rather than retry."),
+    ],
+    "result_noun": "product",
+    "result_image": None,
+    "voices_intro": (
+        "From roughly 28 on-topic Reddit posts in August 2026, of which 16 were vendor written and "
+        "excluded: four in one vendor's own subreddit, two of those word for word identical, plus "
+        "one account running the same buying question through three scraping subreddits. The X half "
+        "of the research held nothing organic on this job at all. What survived says something "
+        "different from the marketing, so this page is built on it."),
+    "voices": [
+        ("The official API is gated behind a business you may not be in",
+         "I applied for the official Amazon Product Advertising API (PA-API), got my keys, but for some reason, they never actually granted me functional access.",
+         "r/developersIndia, 103 points", "https://www.reddit.com/r/developersIndia/comments/1q4i0l8/amazon_denied_my_api_access_so_i_built_my_own/",
+         "The highest scoring organic post in the research, and the theme the marketing around this "
+         "job never mentions, because it is easier to sell you a fix for blocking. Amazon's product "
+         "API belongs to its affiliate programme, so it is granted to people earning it commission, "
+         "not to people who want product data. Every row on this page sidesteps that by inverting "
+         "the relationship: you are paying for data rather than being paid for referrals."),
+        ("The deadlock: no API without sales, no sales without the API",
+         "How do you get approved for Amazon Affiliate marketing if you cannot use the product advertising API without being approved first?",
+         "r/Affiliatemarketing, 2 points", "https://www.reddit.com/r/Affiliatemarketing/comments/1alp1an/how_do_you_get_approved_for_amazon_affiliate/",
+         "A fair question with an uncomfortable answer, and worth spelling out because the same "
+         "poster goes on to ask whether to host Amazon's images anyway. Buying the data from a "
+         "third party breaks the deadlock and does not touch the licence: these rows return image "
+         "URLs, they do not grant you Amazon's rights to those images. If your plan needs the "
+         "images, the affiliate programme is still the route, and this page is not a way around it."),
+        ("An agent asked to read a listing will invent one instead",
+         "You cannot use Chatgpt to search Amazon products - it won't even open links",
+         "r/OpenAI, 50 points", "https://www.reddit.com/r/OpenAI/comments/1ph2nul/you_cannot_use_chatgpt_to_search_amazon_products/",
+         "The thread underneath is the interesting part: the model did not fail loudly, it "
+         "substituted a price from elsewhere and insisted it had read the listing. That is the "
+         "failure mode that matters for agents, because it looks like an answer. A priced call "
+         "against a named ASIN turns it into a fetch with a cost and a result, which is checkable "
+         "in a way a confident paragraph is not."),
+        ("A hand rolled scraper meets the CAPTCHA within a few dozen pages",
+         "I tried using random user agents, time.sleep() to avoid that darned captcha page.",
+         "r/webscraping, 4 points", "https://www.reddit.com/r/webscraping/comments/yn1cvl/bot_detection_with_python_requests/",
+         "This is the second act of nearly every story in the research: the official route is shut, "
+         "so people write the script, and the script dies somewhere in the first hundred pages. "
+         "What changes here is who owns the repair. What does not change is that every provider in "
+         "this space fails some proportion of requests, so the honest question is not who never "
+         "fails but who tells you when they did, and what that failure costs you."),
+        ("The proxy fixes the blocking and hands you the latency",
+         "Requests without the proxy had an average response time of 1.5 seconds. However, with the proxy, the response time increased to around 6-10 seconds.",
+         "r/scrapy, 1 point", "https://www.reddit.com/r/scrapy/comments/187goqh/requests_through_the_rotating_residential_proxy/",
+         "Worth quoting precisely because it is not the complaint the vendor content wants you to "
+         "have. In the organic posts the grievance about proxies is speed and upkeep, not price; "
+         "the same poster calls his provider the cheapest he found. So compare on the whole cost of "
+         "the do it yourself path, the maintenance and the seconds, rather than on a monthly proxy "
+         "bill, and be sceptical of any page here or elsewhere that opens on how expensive proxies "
+         "are."),
+    ],
+    "q_cheapest": "Which Amazon product API is cheapest?",
+    "q_reliable": "Which one is the most reliable?",
+    "q_compare": "How do the providers compare?",
+    "what_is_heading": "What is an Amazon product API?",
+    "what_is": (
+        "It returns one Amazon listing as structured data rather than as a page: the title, the "
+        "price showing at the moment of the call, images, the specification table, the rating and "
+        "the review count. It is not Amazon's own API and it is not a feed. Each call reads a "
+        "public product page as an anonymous visitor would see it, which is what makes it available "
+        "without an Associates account and also what sets the edges of what it can ever return."),
+    "notes": [
+        "The three rows do not take the same key, which is work before it is price. Bright Data "
+        "takes a product URL and returns records from its Amazon dataset. JustOneAPI takes the ASIN "
+        "with a country code. SerpApi takes the ASIN with an Amazon domain. If what you hold is a "
+        "list of bare ASINs, two of these are a direct call and the third needs a URL built first.",
+        "There is no single true price for an ASIN, and that is not a gap in this comparison. What "
+        "a product page shows depends on the marketplace, the delivery address, whether the viewer "
+        "has Prime and which seller holds the buy box that second, so no provider can be more "
+        "accurate in the abstract. The checkable difference is which of them lets you pin the "
+        "context: a country code here, an Amazon domain there, and on the URL based row whatever "
+        "marketplace the URL points at.",
+        "Every row bills only what succeeds, which is what makes a long unverified list safe to "
+        "hand an agent. Two are priced per successful call and the third per record actually "
+        "delivered, so an ASIN that is dead, region locked or withdrawn costs nothing. What you can "
+        "still run up is your own retry loop, so tell the agent to skip and report rather than to "
+        "try harder.",
+    ],
+    "faq": [
+        ("How much does one product lookup cost?",
+         "A fraction of a cent to about a cent and a half depending on the row, at the provider's "
+         "own rate with $0.000 added by treg.to. The live figures are in the comparison above, and "
+         "all three bill only when the lookup works."),
+        ("Why not use Amazon's own API?",
+         "Because neither of Amazon's APIs is a general read any product API. The Product "
+         "Advertising API belongs to the affiliate programme and is granted to accounts earning "
+         "qualifying commission, which is why people report keys that never became working access. "
+         "The Selling Partner API is for managing your own selling account. If you are in neither "
+         "programme, there is no official door."),
+        ("Do these give me the right to use Amazon's product images?",
+         "No, and it is worth being blunt because the research is full of people asking. A data API "
+         "returns image URLs; it does not hand you Amazon's licence to host or republish them. "
+         "Rights to product imagery come from the affiliate programme or from the brand, and no "
+         "amount of paying for data changes that."),
+        ("Can I look up thousands of ASINs?",
+         "Yes, and the cost is linear because it is one call per ASIN with no batch endpoint. Your "
+         "agent runs the list; treg.to prices each call and shows the running total, and since all "
+         "three rows bill only on success, the dead entries in a scraped list do not cost you "
+         "anything."),
+    ],
+    "related": ("Amazon search and best sellers", "TikTok Shop products and reviews",
+                "App store search", "Product reviews"),
+}
