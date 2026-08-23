@@ -414,3 +414,21 @@ def test_related_cards_resolve_to_the_job_s_own_category():
             assert cat == owner[lbl], (key, lbl, cat)
             assert href == (_use_case_page_for(owner[lbl], lbl)
                             or f"/agents/chatgpt#{agent_pages.category_slug(owner[lbl])}"), (key, lbl)
+
+
+async def test_a_provider_with_no_dollar_rate_is_not_labelled_free(clients: AsyncClient):
+    """`free` and `no published rate` are different facts. Semrush prices the SERP and ranked
+    keyword jobs in pre-bought API units, so its `cost_view` carries no USD, and the price cell
+    read "free, your own account" for what is in fact the dearest option on the page."""
+    cat = catalog_store.load()
+    page = "/use-cases/seo/google-results-for-a-keyword"
+    eps = [e for e in cat.for_capability("google.serp.organic")
+           if e["kind"] not in catalog_store.HIDDEN_KINDS]
+    unpriced = [e for e in eps
+                if not ((c := cat.cost_view(e.get("cost"), e.get("provider"))) and c["usd"])]
+    assert unpriced, "this test needs a row the provider publishes no dollar rate for"
+    assert all((e.get("cost") or {}).get("type") != "free" for e in unpriced)
+    for text in ((await clients.get(page)).text, (await clients.get(page + ".md")).text):
+        assert "no dollar rate published" in text
+        assert "free, your own account" not in text
+        assert "own account, free" not in text

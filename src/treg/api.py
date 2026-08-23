@@ -1414,8 +1414,12 @@ def _uc_providers(cat, eps: list[dict], obs: dict) -> list[dict]:
                     if isinstance(v, dict) and k not in ins:
                         ins.append(k)
         slug = plat
+        # "no dollar price" and "free" are different facts and were rendering as one. Semrush
+        # prices this job in pre-bought API units, so its cost_view has no USD, and the price cell
+        # read "free, your own account" for the dearest option on the page.
+        free = any((e.get("cost") or {}).get("type") == "free" for e in peps)
         out.append({
-            "id": prov, "name": _provider_display(prov), "eps": peps,
+            "id": prov, "name": _provider_display(prov), "eps": peps, "free": free,
             "domain": agent_pages.PROVIDER_DOMAINS.get(prov),
             "platform": slug, "platform_label": (cat.platforms.get(slug) or {}).get("label") or slug,
             "usd": priced[0][0] if priced else None,
@@ -1570,7 +1574,8 @@ async def use_case_job_page(request: Request, category: str, job: str,
                     md += [f"#### {plat}", ""]
                 md += ["| Provider | Price | Accepts | Verified |", "|---|---|---|---|"]
                 for p in sorted(rows_, key=lambda p: (p["usd"] is None, p["usd"] or 0)):
-                    price = f"{money(p['usd'])} per {p['unit']}" if p["usd"] else "own account, free"
+                    price = (f"{money(p['usd'])} per {p['unit']}" if p["usd"]
+                             else ("own account, free" if p["free"] else "no dollar rate published"))
                     md.append(f"| {p['name']} | {price} | {', '.join(p['inputs'])} | {p['verified'] or 'unverified'} |")
                 md.append("")
         md += ["Endpoints:", ""] + [f"- `{e['id']}`: {_uc_call(e)}" for e in eps]
@@ -1612,8 +1617,11 @@ async def use_case_job_page(request: Request, category: str, job: str,
                          for t, d in agent_pages.WHY_TREG)
 
     def price_cell(p: dict) -> str:
-        return (f'{_esc_html(money(p["usd"]))} <span style="color:var(--muted2)">per {p["unit"]}</span>'
-                if p["usd"] else '<span style="color:var(--green)">free, your own account</span>')
+        if p["usd"]:
+            return f'{_esc_html(money(p["usd"]))} <span style="color:var(--muted2)">per {p["unit"]}</span>'
+        if p["free"]:
+            return '<span style="color:var(--green)">free, your own account</span>'
+        return '<span style="color:var(--muted2)">no dollar rate published</span>'
 
     def rel_cell(p: dict) -> str:
         return (f'{pct(p["ok_rate"])} <span style="color:var(--muted2)">({p["samples"]} calls)</span>'
