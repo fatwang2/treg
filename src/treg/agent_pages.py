@@ -2474,3 +2474,102 @@ USE_CASE_PAGES[("connect-your-own-accounts", "google-analytics-traffic-and-behav
     "related": ("Search Console: clicks, impressions and top queries", "Realtime visitors on your site",
                 "Is this page indexed, and why not", "Your own campaign performance"),
 }
+
+USE_CASE_PAGES[("finance-markets", "current-quote-for-a-ticker")] = {
+    "label": "Current quote for a ticker",
+    "sentence": "Stock price API: the current quote for a ticker from four providers, free to start",
+    "title": "Stock price API: {n} providers, free to try | treg.to",
+    "lede": (
+        "Ask for a ticker and get the quote back as data: price, day change, open, high, low and "
+        "previous close. {n} providers answer through one treg.to key. Three of them are served "
+        "on treg.to's own free-tier keys, {cheapest}, then on your own key; the fourth is your own "
+        "plan only. Each one says whether its quote is real time or delayed, and the page says it "
+        "too, because that word is where stock APIs go wrong."),
+    "prompt": "Using treg, get the current price, day change and previous close for AAPL, MSFT and "
+              "NVDA. Tell me which provider you will use and whether its quote is real time or "
+              "delayed before you call, and stop if the free allowance is used up.",
+    "prompt_why": [
+        ("Ask whether it is delayed", "One of these is 15 to 20 minutes behind by design. The agent should say which before it quotes."),
+        ("One ticker is one call", "The free allowance is counted in calls per team per day, so a watchlist of fifty is a day's allowance."),
+        ("Try on the allowance, build on your key", "The daily pool is for finding out which feed you want. A bot needs a key of its own."),
+        ("Compare, then pick", "treg.to shows the four side by side and does not choose for you. Say which one you want, or say why."),
+    ],
+    "result_noun": "quote",
+    "result_image": None,
+    "what_is_heading": "What is a stock price API?",
+    "what_is": (
+        "A stock price API returns the current quote for a ticker symbol as data: last price, "
+        "the day's change, open, high, low, previous close and usually volume, sometimes the "
+        "52-week range. The catch is the word current. A feed is real time, delayed by an "
+        "exchange-mandated window, or a single exchange's view rather than the consolidated tape, "
+        "and the free tier of most providers is small enough that a script polling every minute "
+        "runs out before lunch. The unofficial Yahoo Finance endpoints most free scripts lean on "
+        "are not an API at all, and break without notice."),
+    "notes": [
+        "The free allowance is real and it is small on purpose. Finnhub is served at fifty calls "
+        "per team per day on treg.to's key, Tiingo and Twelve Data at twenty each; past that the "
+        "call is refused with a hint to connect your own key, and with your own key the calls "
+        "are never metered. It is enough to try each feed on the tickers you care about. It is "
+        "not a data plan for a trading bot, and this page will not pretend it is.",
+        "Real time means four different things here. Finnhub's quote is documented as real time "
+        "for US tickers. Tiingo's is the IEX feed, one exchange's top of book rather than the "
+        "consolidated tape. Twelve Data returns stocks, forex and crypto in one quote shape with "
+        "the 52-week range, and has a one-number price call for the cheapest possible check. "
+        "EODHD's live quote is 15 to 20 minutes delayed, and since EODHD publishes no per-call "
+        "rate it is served on your own EODHD plan only.",
+        "Providers disagree, occasionally by a lot, and treg.to does not referee. A quote is one "
+        "provider's number at one moment; a second provider on the same ticker is the cheap "
+        "sanity check, and the agent can run both. Symbol formats differ too: EODHD wants an "
+        "exchange suffix, AAPL.US, where the others take the bare US ticker.",
+    ],
+    "faq": [
+        ("Is it really free?",
+         "Three of the four are, up to a daily allowance per team, on treg.to's own free-tier "
+         "keys: fifty calls on Finnhub, twenty each on Tiingo and Twelve Data. After that, "
+         "connect your own key and the calls are never metered."),
+        ("Is the quote real time?",
+         "Depends on the provider, and the page says which. Finnhub is real time for US tickers, "
+         "Tiingo is the IEX feed, EODHD is 15 to 20 minutes delayed. Ask the agent to name the "
+         "provider before it quotes."),
+        ("Can I run a trading bot on this?",
+         "Not on the allowance. A bot polling every minute exhausts fifty calls before the open. "
+         "Register your own key with the provider you settle on and treg.to stops counting."),
+        ("What about tickers outside the US?",
+         "Coverage is each provider's, not treg.to's. Finnhub's quote is documented for US "
+         "tickers; EODHD and Twelve Data take exchange-suffixed symbols. Check the ticker you "
+         "need on the allowance before you build on it."),
+    ],
+    "voices_intro": (
+        "The stock API forums are a long argument about yfinance. From ~200 Reddit and X posts in "
+        "August 2026, about thirty were vendors, including one founder seeding eight tweets for "
+        "his own product and one listicle pasted into three subreddits. These four are people who "
+        "hit the wall."),
+    "voices": [
+        ("The model cannot see a live price on its own",
+         "It doubled my money on the first trade. Then it told me it can't see live stock prices.",
+         "r/smallstreetbets, 574 points", "https://www.reddit.com/r/smallstreetbets/comments/1r883gd/i_spent_8_months_asking_claude_dumb_questions_now/",
+         "The poster spent eight months wiring a quote feed into the model by hand. The setup line "
+         "on this page is the short version: the agent gets four quote providers and a price "
+         "shown before the call, and never holds a key."),
+        ("The free library breaks and blocks you",
+         "yfinance is so unreliable; any other free apis?",
+         "r/algotrading, 117 points", "https://www.reddit.com/r/algotrading/comments/1kdw27f/yfinance_is_so_unreliable_any_other_free_apis/",
+         "These are documented, metered APIs rather than a reverse-engineered Yahoo endpoint, "
+         "which is the whole difference. The honest caveat is the allowance: free to try, your "
+         "own key to run."),
+        ("By the time it arrives it is stale",
+         "By the time I get the data, the prices are already stale.",
+         "r/algotrading, 23 points", "https://www.reddit.com/r/algotrading/comments/1jjj6cb/need_a_better_alternative_to_yfinance_any_good/",
+         "Stale has a cause, and here it is named per provider: a delayed feed, or a single "
+         "exchange's view. Pick the feed for the latency you need rather than discovering it "
+         "from a bad fill."),
+        ("Public numbers, priced like a secret",
+         "How is it possible that you need to pay hundreds of dollars just to access historical data / facts that are publicly known?",
+         "r/webdev, 114 points", "https://www.reddit.com/r/webdev/comments/151zk8y/is_there_any_free_stock_market_api_that_allows/",
+         "Exchange licensing, mostly, and nothing on this page changes it. What the page can do "
+         "is show the provider's own terms next to each other before you commit to one, and let "
+         "you try three of them for nothing."),
+    ],
+    "related": ("Daily price history", "News for a ticker",
+                "Live crypto prices and history", "Company profile and fundamentals behind a ticker"),
+}
