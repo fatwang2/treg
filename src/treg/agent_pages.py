@@ -2096,3 +2096,106 @@ USE_CASE_PAGES[("seo", "keywords-a-domain-ranks-for")] = {
     "related": ("Google results for a keyword", "Keyword volume, CPC and competition",
                 "Backlink profile of a domain", "Keywords a domain bids on"),
 }
+
+USE_CASE_PAGES[("seo", "how-ai-answers-mention-your-brand")] = {
+    "label": "How AI answers mention your brand",
+    "sentence": "AI visibility tracking: how ChatGPT and Perplexity answers mention your brand, run by your agent",
+    "title": "AI visibility tracking API, from {cheapest} a check | treg.to",
+    "lede": (
+        "Every AI visibility tool sells the same loop: run a set of prompts through ChatGPT and "
+        "Perplexity, note who gets named, repeat next week. Your agent can run that loop itself. "
+        "One provider serves it through treg.to, as live answers to a prompt and as aggregated "
+        "mention metrics for a keyword or domain, priced per call from {cheapest}, with no "
+        "subscription and no dashboard to pay for."),
+    "prompt": "Using treg, run these 12 buyer prompts through ChatGPT and Perplexity, US, web search "
+              "on, and tell me for each one whether treg.to or any of Composio, Pipedream or Zapier "
+              "is named, and in what position. Show me the total price before you start.",
+    "prompt_why": [
+        ("Fix the prompt set first", "The check is only comparable week to week if the prompts do not move."),
+        ("Name the competitors", "Presence on its own says little; share of the answer against named rivals is the number."),
+        ("Ask for the price up front", "The two answer endpoints differ five times in price; the metrics call is dearer again."),
+        ("Run it more than once", "Answers vary run to run. Two passes on the same day show you the noise floor."),
+    ],
+    "result_noun": "answer",
+    "result_image": None,
+    "what_is_heading": "What is AI visibility tracking?",
+    "what_is": (
+        "AI visibility tracking is the practice of measuring whether, and how, AI answer engines "
+        "such as ChatGPT, Perplexity and Google's AI Overviews mention a brand when someone asks "
+        "the questions its buyers ask. It borrows the shape of rank tracking, a fixed prompt set "
+        "checked on a schedule, but the answers are generated rather than ranked, so the same "
+        "prompt can name different brands on different days. The tools sold under this name "
+        "charge a monthly subscription for running the prompts and charting the result; the "
+        "underlying data is a call to the model and a count."),
+    "notes": [
+        "There are two kinds of endpoint here and they answer different questions. The two live "
+        "answer endpoints send your prompt to ChatGPT or Perplexity, with web search on if you ask "
+        "for it and a country to search from, and return the answer as data for your agent to read: "
+        "that is the check. The two mention-metrics endpoints return aggregated counts of how often "
+        "a keyword or a domain appears across a platform's answers, which is the trend line. Run "
+        "the first on your prompt set and the second on your domain.",
+        "The prices are not alike. On the catalog's verified rates a Perplexity answer is about "
+        "half a cent, a ChatGPT answer about three cents, and a mention-metrics call about a dime. "
+        "A weekly run of fifty prompts on both engines is therefore under two dollars, which is the "
+        "argument against a subscription; a daily run across many domains is where the metrics "
+        "call starts to matter.",
+        "The answer is a sample, not a fact. The same prompt to the same model on the same day can "
+        "name a different set of brands, and every engine changes what it cites without notice. "
+        "Nothing on this page smooths that, and no tool that charts it can either. What the "
+        "per-call price buys you is the ability to repeat the run cheaply enough to see the noise "
+        "before you read a trend into it.",
+    ],
+    "faq": [
+        ("Is this a scrape of the ChatGPT website?",
+         "No. The provider calls the model's own API with web search enabled and returns the "
+         "answer as structured data. You choose the model name and the country to search from. "
+         "It is the same generated answer, without a browser."),
+        ("Can it tell me how to get mentioned?",
+         "No. It tells you whether you are named, in which answers, and how that count moves. "
+         "Earning the mention is a content and citation problem, and the neighbouring pages on "
+         "Google results and a domain's backlinks are the places to start on it."),
+        ("Which engines are covered?",
+         "Live answers from ChatGPT and Perplexity. The mention metrics take a platform parameter, "
+         "and the catalog's verified examples use ChatGPT and Google. Gemini and Claude are not "
+         "on this shelf today."),
+        ("Do I need a DataForSEO account?",
+         "No. treg.to serves this on its own key at the provider's rate with $0.000 markup, "
+         "metered from your team's balance. If you already have an account, register the key "
+         "and those calls are never metered."),
+    ],
+    "voices_intro": (
+        "This is the most astroturfed category on the menu: 10 of the 22 relevant posts in "
+        "August 2026 were tool launches, vendor data dumps posted twice, or a vendor's employee "
+        "asking the question their product answers. These four are people doing the job by hand."),
+    "voices": [
+        ("The check is a weekly copy-and-paste job",
+         "who's still manually prompting ChatGPT and Claude to check if their brand shows up in AI answers?",
+         "r/seogrowth, 22 points", "https://www.reddit.com/r/seogrowth/comments/1sm5t9r/whos_still_manually_prompting_chatgpt_and_claude/",
+         "This is exactly the loop an agent should own. Hand it the prompt list and the competitor "
+         "names, and it runs the set through both engines and returns a table, at a few cents a "
+         "prompt, on whatever schedule you give it."),
+        ("Nobody is sure what the method should even be",
+         "API calls on a schedule, a paid tool, something manual in a spreadsheet?",
+         "r/aeo, 16 points", "https://www.reddit.com/r/aeo/comments/1vqugjg/how_do_you_actually_track_ai_visibility_across/",
+         "The first of those three, and it is less work than it sounds. The schedule is the "
+         "agent's, the API is one call per prompt per engine, and the spreadsheet is the table it "
+         "hands back. Which prompts represent your buyers is still your judgement; no API makes "
+         "that call."),
+        ("The numbers feel made up",
+         "curious what youre actually tracking for AI citations because the methodology feels kind of made up right now",
+         "r/DigitalMarketing, 54 points", "https://www.reddit.com/r/DigitalMarketing/comments/1staemu/added_ai_citation_tracking_to_our_monthly_reports/",
+         "It is, a little, everywhere: a generated answer is a sample. The honest version of the "
+         "metric is a fixed prompt set, run more than once, with the run-to-run variance reported "
+         "next to the share. A per-call price makes the repeat runs affordable; it does not make "
+         "the engines consistent."),
+        ("Doing it yourself, the API bill ran past the estimate",
+         "I ran 1,564 real ChatGPT answers through the numbers to check if its Reddit citations actually cratered",
+         "r/aeo", "https://www.reddit.com/r/aeo/comments/1vwuthp/i_ran_1564_real_chatgpt_answers_through_the/",
+         "A self-built run with web search on, cut short at seven of ten categories when the "
+         "per-call cost overran. That is the case for seeing the price before the run: the agent "
+         "shows the total for the prompt set first, and a thousand ChatGPT answers here is a known "
+         "figure, not an estimate."),
+    ],
+    "related": ("Google results for a keyword", "Keywords a domain ranks for",
+                "Backlink profile of a domain", "Search Console: clicks, impressions and top queries"),
+}
