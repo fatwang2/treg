@@ -2287,3 +2287,96 @@ USE_CASE_PAGES[("connect-your-own-accounts", "your-google-business-profile-revie
     "related": ("A business's reviews", "Find local businesses by keyword and location",
                 "Search terms that surfaced your listing on Maps", "Search Console: clicks, impressions and top queries"),
 }
+
+USE_CASE_PAGES[("local-businesses-reviews", "a-business-s-reviews")] = {
+    "label": "A business's reviews",
+    "sentence": "Review scraper API: a business's reviews from Tripadvisor, Trustpilot and Yelp, as data",
+    "title": "Tripadvisor, Trustpilot and Yelp reviews API | treg.to",
+    "lede": (
+        "Give your agent a business's page and get its reviews back as rows: rating, text, date "
+        "and reviewer, ready to sort, count or read. Three review sites answer through one treg.to "
+        "key, from {cheapest}, without a Tripadvisor API key, a Yelp Fusion application or a "
+        "browser of your own. They are not alternatives to each other; the site is the choice."),
+    "prompt": "Using treg, pull the last 200 Tripadvisor reviews for this hotel URL, show me the "
+              "price first, then give me the rating distribution by month and the ten most recent "
+              "reviews of two stars or fewer in full.",
+    "prompt_why": [
+        ("Give the page, not the name", "Every provider here takes a URL, a path or a domain. Find the listing first if you only have a name."),
+        ("Say how many you want", "The Trustpilot and Tripadvisor tasks take a depth. The count you ask for is the count you pay for."),
+        ("Compare on the unit", "One provider bills per record delivered, the other per task. Ask which is cheaper for your count."),
+        ("Bring your own analysis", "The rows carry the text. Sentiment, themes and summaries are the agent's job on top."),
+    ],
+    "result_noun": "review",
+    "result_image": None,
+    "what_is_heading": "What is a review scraper API?",
+    "what_is": (
+        "A review scraper API returns the public reviews on a business's listing as structured "
+        "records, rating, text, date, reviewer and the business's reply where there is one, "
+        "without you running a browser against the site. It exists because the official routes "
+        "are narrow: Yelp's Fusion API is an application and a plan, Tripadvisor's Content API "
+        "is an approval, and neither is built for pulling every review of one business. The "
+        "providers here read the public page and hand back the rows."),
+    "notes": [
+        "The two providers bill in different units and the difference matters for a long pull. "
+        "Bright Data delivers records and bills per record delivered, on Yelp and Trustpilot. "
+        "DataForSEO runs a task, on Tripadvisor and Trustpilot, and bills per task at a fraction of "
+        "a cent whatever the depth returns. For a few dozen reviews the difference is nothing; for "
+        "a business with thousands, ask the agent to price both before it starts.",
+        "The input is the listing, not the business name. Tripadvisor wants the review page's "
+        "path, Trustpilot the business's domain, Yelp the page URL, so the agent resolves a name "
+        "to a listing first, which is the neighbouring job on this menu. A wrong page returns "
+        "someone else's reviews, not an error.",
+        "This is the public page as it stands. A review the site has removed is gone from here "
+        "too, the rows are as fresh as the crawl behind them, and what you may do with the text "
+        "is governed by each site's terms and your own use, which no provider settles for you.",
+    ],
+    "faq": [
+        ("Do I need a Yelp Fusion or Tripadvisor API key?",
+         "No. Neither provider here uses the sites' official APIs. They read the public listing "
+         "page and return the reviews as records, billed to your treg.to balance at the provider's "
+         "rate with $0.000 markup."),
+        ("Which site should I use?",
+         "The one the business is reviewed on. Tripadvisor for hotels, restaurants and attractions, "
+         "Trustpilot for online businesses by domain, Yelp for local services in North America. "
+         "Pulling from the wrong site returns a short, misleading list."),
+        ("What about Google reviews?",
+         "The reviews on a listing you own or manage are the Business Profile job on this menu, "
+         "free on your own account. This page covers the three public review sites."),
+        ("Can I get all of a business's reviews?",
+         "You can ask for a depth, and the task returns up to that many. Whether every review "
+         "of a business with thousands comes back is a property of the site, so check the count "
+         "against the listing rather than assuming."),
+    ],
+    "voices_intro": (
+        "Review data is sold hard: about 25 of the ~120 posts on these three sites in August 2026 "
+        "were scraper vendors, Apify listings posted from template accounts, and the same lead-gen "
+        "thread pasted twice. These four are people who tried the official door first."),
+    "voices": [
+        ("The official Yelp API returns nothing for a valid business",
+         "Yelp Fusion API \"NOT_FOUND\" error when requesting reviews (Python)",
+         "r/webscraping", "https://www.reddit.com/r/webscraping/comments/1ivggvp/yelp_fusion_api_not_found_error_when_requesting/",
+         "The Yelp provider on this page does not go through Fusion at all. It reads the public "
+         "page by URL and bills per record delivered, so a business that Fusion cannot find is "
+         "still a page you can point at."),
+        ("Yelp at any scale fights back",
+         "Is Yelp just a nightmare to scrape, or are no-code tools just not built for this at scale?",
+         "r/scrapingtheweb, 9 points", "https://www.reddit.com/r/scrapingtheweb/comments/1t6pyca/have_you_ever_tried_scraping_yelp_without_coding/",
+         "Both, and the answer is to stop running the browser yourself. A per-record provider "
+         "carries the blocking, the retries and the proxies, and you pay for the rows that arrive. "
+         "That is what the fraction of a cent buys."),
+        ("Trustpilot stops at a couple of hundred without a login",
+         "they cap you at 200 reviews without auth. A `jwt` cookie removes the cap.",
+         "r/webscraping, 7 points", "https://www.reddit.com/r/webscraping/comments/1vw95dz/scraper_for_pulling_trustpilot_reviews/",
+         "A self-built scraper's workaround, and the kind of thing that breaks quietly. The "
+         "Trustpilot task here takes a depth parameter instead; ask for what you need and read "
+         "the count that comes back rather than assuming the whole history arrived."),
+        ("The official price is the reason people scrape",
+         "their API is horrifically expensive for poor old me, and I was not in the mood to build a web scraper",
+         "r/gis, ~800 points", "https://www.reddit.com/r/gis/comments/1iph0yy/the_closer_to_the_railway_station_the_less_tasty/",
+         "The page shows the provider's rate before the call, in fractions of a cent per record "
+         "or per task, so the choice between paying and building is a number rather than a mood."),
+    ],
+    "related": ("Find local businesses by keyword and location",
+                "Your Google Business Profile reviews, and reply to them",
+                "Product reviews", "Hotel listing details"),
+}
