@@ -1418,8 +1418,13 @@ def _uc_providers(cat, eps: list[dict], obs: dict) -> list[dict]:
         # prices this job in pre-bought API units, so its cost_view has no USD, and the price cell
         # read "free, your own account" for the dearest option on the page.
         free = any((e.get("cost") or {}).get("type") == "free" for e in peps)
+        # A $0 trial row is a third fact again: served on treg.to's own free-tier key with a daily
+        # allowance per team (catalog.trial_pools), so neither "free, your own account" nor a price
+        # is true of it. Carry the allowance so the cell can state it.
+        trial = max((cv.get("trial_calls_per_team_day") or 0) for e in peps
+                    if (cv := cat.cost_view(e.get("cost"), e.get("provider"))))
         out.append({
-            "id": prov, "name": _provider_display(prov), "eps": peps, "free": free,
+            "id": prov, "name": _provider_display(prov), "eps": peps, "free": free, "trial": trial,
             "domain": agent_pages.PROVIDER_DOMAINS.get(prov),
             "platform": slug, "platform_label": (cat.platforms.get(slug) or {}).get("label") or slug,
             "usd": priced[0][0] if priced else None,
@@ -1507,6 +1512,11 @@ async def use_case_job_page(request: Request, category: str, job: str,
     headline = cheapest_by_unit[units[0]] if units else None
     reliable = sorted([p for p in provs if p["samples"] and p["ok_rate"] is not None],
                       key=lambda p: (-p["ok_rate"], p["p50"] or 9e9, -p["samples"]))
+    # No priced row is two different facts: own-account rows are free on the reader's key; trial
+    # rows are free on treg.to's key up to a daily allowance. Say whichever is true.
+    trial_max = max((p["trial"] for p in provs), default=0)
+    free_words = (f"free, up to {trial_max} calls a day on treg.to's key" if trial_max
+                  else "free on your own account")
     n = str(len({p["id"] for p in provs}))
     n_ver = sum(1 for e in eps if e.get("verified"))
     latest_verified = max((e.get("verified") or "" for e in eps), default="")
@@ -1526,11 +1536,15 @@ async def use_case_job_page(request: Request, category: str, job: str,
 
     title = spec.get("title", "{sentence}: {n} providers | treg.to").format(
         sentence=spec["sentence"], n=n, agent=agent_name,
-        cheapest=money(headline["usd"]) if headline else "free on your own account")
+        cheapest=money(headline["usd"]) if headline else free_words)
     lede = spec["lede"].format(n=n, agent=agent_name,
-                               cheapest=money(headline["usd"]) if headline else "free on your own account")
+                               cheapest=money(headline["usd"]) if headline else free_words)
     bits_desc = [spec["sentence"] + "."]
-    if form == "short":
+    metered_single = form == "short" and not provs[0]["free"]
+    if metered_single:
+        bits_desc.append(f"One provider, {money(headline['usd'])} per {headline['unit']} on treg.to's key, no signup."
+                         if headline else "One provider, served on treg.to's key.")
+    elif form == "short":
         bits_desc.append("Runs on the account you already own, so treg.to never meters it.")
     elif headline:
         bits_desc.append(f"{n} providers compared, cheapest {money(headline['usd'])} per {headline['unit']}.")
@@ -1544,7 +1558,15 @@ async def use_case_job_page(request: Request, category: str, job: str,
               f'Then ask: "{spec["prompt"]}"', ""]
         md += [f"- **{t}** {d}" for t, d in spec["prompt_why"]]
         md += ["", "## Why go through treg.to", ""] + [f"- **{t}** {d}" for t, d in agent_pages.WHY_TREG]
-        if form == "short":
+        if metered_single:
+            e0 = provs[0]["cheapest_ep"] or provs[0]["eps"][0]
+            md += ["", "## How it works", "",
+                   f"One provider does this job: {provs[0]['name']} (`{e0['id']}`), served on treg.to's own key at "
+                   + (f"{money(provs[0]['usd'])} per {provs[0]['unit']}, " if provs[0]["usd"] else "")
+                   + "the provider's own rate with $0.000 markup, metered from your team's balance. "
+                   "No account with the provider, and no key of your own, unless you would rather bring one.",
+                   "", f"    {_uc_call(e0)}", ""]
+        elif form == "short":
             e0 = provs[0]["eps"][0]
             md += ["", "## How it works", "",
                    f"One provider does this job: {provs[0]['name']} (`{e0['id']}`), on the account you already own. "
@@ -1575,7 +1597,8 @@ async def use_case_job_page(request: Request, category: str, job: str,
                 md += ["| Provider | Price | Accepts | Verified |", "|---|---|---|---|"]
                 for p in sorted(rows_, key=lambda p: (p["usd"] is None, p["usd"] or 0)):
                     price = (f"{money(p['usd'])} per {p['unit']}" if p["usd"]
-                             else ("own account, free" if p["free"] else "no dollar rate published"))
+                             else (f"free, {p['trial']} calls a day on treg.to's key, then your own key" if p["trial"]
+                                   else ("own account, free" if p["free"] else "no dollar rate published")))
                     md.append(f"| {p['name']} | {price} | {', '.join(p['inputs'])} | {p['verified'] or 'unverified'} |")
                 md.append("")
         md += ["Endpoints:", ""] + [f"- `{e['id']}`: {_uc_call(e)}" for e in eps]
@@ -1603,7 +1626,7 @@ async def use_case_job_page(request: Request, category: str, job: str,
         f'<img src="https://unpkg.com/@lobehub/icons-static-png@latest/light/{icon}.png" alt="{_esc_html(label)}" loading="lazy"/></span>'
         for aid, label, icon in agent_pages.AGENT_ICONS[:6])
     hero_price = (f"from {_esc_html(money(headline['usd']))} per {headline['unit']}"
-                  if headline else "free on the account you already own")
+                  if headline else _esc_html(free_words if trial_max else "free on the account you already own"))
 
     def promptbox(label: str, text: str) -> str:
         return ('<div class="promptbox"><div class="ph">'
@@ -1619,6 +1642,9 @@ async def use_case_job_page(request: Request, category: str, job: str,
     def price_cell(p: dict) -> str:
         if p["usd"]:
             return f'{_esc_html(money(p["usd"]))} <span style="color:var(--muted2)">per {p["unit"]}</span>'
+        if p["trial"]:
+            return (f'<span style="color:var(--green)">free, {p["trial"]} calls a day</span> '
+                    '<span style="color:var(--muted2)">on treg.to\'s key, then your own key</span>')
         if p["free"]:
             return '<span style="color:var(--green)">free, your own account</span>'
         return '<span style="color:var(--muted2)">no dollar rate published</span>'
@@ -1641,7 +1667,21 @@ async def use_case_job_page(request: Request, category: str, job: str,
                 f'</tr></thead><tbody>{body_rows}</tbody></table></div>')
 
     sections = []
-    if form == "short":
+    if metered_single:
+        p0 = provs[0]
+        e0 = p0["cheapest_ep"] or p0["eps"][0]
+        rate = f'{_esc_html(money(p0["usd"]))} per {p0["unit"]}, ' if p0["usd"] else ""
+        sections.append(
+            '<section id="how"><div class="wrap"><div class="seclab">How it works</div>'
+            f'<h2>One provider, served on treg.to\'s key</h2>'
+            f'<p>{_logo(p0["domain"], p0["name"])}<b>{_esc_html(p0["name"])}</b> answers this job, at {rate}'
+            'the provider\'s own rate with $0.000 markup, metered from your team\'s balance. No account with the '
+            'provider and no key of your own, unless you would rather bring one.</p>'
+            f'<div class="sample"><div class="sbar">the call</div><pre>{_esc_html(_uc_call(e0))}</pre></div>'
+            f'<p style="font-size:12.5px;color:var(--muted)">Every endpoint on this shelf is listed on the '
+            f'<a href="/catalog/{_esc_html(e0["platform"])}">{_esc_html((cat.platforms.get(e0["platform"]) or {}).get("label") or e0["platform"])} shelf</a>.</p>'
+            + '</div></section>')
+    elif form == "short":
         p0, e0 = provs[0], provs[0]["eps"][0]
         sections.append(
             '<section id="how"><div class="wrap"><div class="seclab">How it works</div>'
