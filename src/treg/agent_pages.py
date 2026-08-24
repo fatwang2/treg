@@ -2380,3 +2380,97 @@ USE_CASE_PAGES[("local-businesses-reviews", "a-business-s-reviews")] = {
                 "Your Google Business Profile reviews, and reply to them",
                 "Product reviews", "Hotel listing details"),
 }
+
+USE_CASE_PAGES[("connect-your-own-accounts", "google-analytics-traffic-and-behaviour-reports")] = {
+    "label": "Google Analytics: traffic and behaviour reports",
+    "sentence": "Google Analytics MCP or API: GA4 traffic and behaviour reports, read by your agent",
+    "title": "Google Analytics API for {agent}: any GA4 report | treg.to",
+    "lede": (
+        "Connect the GA4 property you already own and your agent can run any report the Data API "
+        "can: sessions, users, conversions and events by channel, page, country, device or date, "
+        "with filters and ordering, in plain words. It is the Google Analytics API without the "
+        "Cloud project, and it runs on your own Google account, so treg.to never meters it."),
+    "prompt": "Using treg, show me sessions and key events by default channel group for the last "
+              "28 days ending 3 days ago, next to the 28 days before, and flag any channel that is "
+              "down by more than a fifth.",
+    "prompt_why": [
+        ("Connect once", "One consent screen for the Google account that can see the property. No Cloud project, no service account."),
+        ("Name the property, or let it list them", "A Google account often sees several GA4 properties. The agent can list them and ask."),
+        ("End the window a few days back", "GA4 keeps processing recent days. A window that ends on yesterday is still settling."),
+        ("It costs nothing", "Your own account, so the call is never metered."),
+    ],
+    "result_image": None,
+    "what_is_heading": "What is the Google Analytics API?",
+    "what_is": (
+        "The Google Analytics Data API is the programmatic side of GA4: you send a property id, a "
+        "date range, dimensions, metrics and optional filters, and it returns the rows the UI's "
+        "Reports and Explore views are built from. It is the same data with none of the Explore "
+        "date-range or sampling-pool caps, and the reason to read it through an agent is that "
+        "the request body, with its dimension and metric names, is fiddly to write and easy to "
+        "get subtly wrong by hand."),
+    "notes": [
+        "The official path to an agent on GA4 is Google's own Analytics MCP server, and its setup "
+        "is a Cloud project, a service account with the API enabled, and admin-level access on "
+        "the property. Here the app is treg.to's, the consent is one screen, and read access on "
+        "the property is enough, which is what makes it usable by a consultant who does not own "
+        "the account.",
+        "Totals move with the dimensions you ask for, and that is GA4, not the relay. A metric "
+        "scoped by session counts differently once you break it down by an event-scoped "
+        "dimension, and the API returns exactly what the UI would for the same request. When the "
+        "number disagrees with the report you remember, ask the agent to run both shapes and "
+        "show the request, rather than assuming one is wrong.",
+        "The API can only return what the property retains. GA4 keeps event-level data for two "
+        "months by default, so a year-on-year or cohort question beyond that window comes back "
+        "empty from the API exactly as it does from Explore. The Data API also enforces per "
+        "property token quotas per hour and per day, so a wide report with many dimension "
+        "combinations is dearer in quota than a narrow one, and the agent should ask before "
+        "running a loop over every page.",
+    ],
+    "faq": [
+        ("Does this cost anything?",
+         "No. Google Analytics runs on your own Google account, so treg.to relays the call and "
+         "meters nothing. Only calls on treg.to's own provider keys are billed."),
+        ("Do I need a Cloud project or a service account?",
+         "No. treg.to holds the Google app; you consent once with the account that can see the "
+         "property, and treg.to keeps the token server side. Your agent never sees it."),
+        ("Which reports can it run?",
+         "Anything runReport accepts: any combination of dimensions and metrics, date ranges, "
+         "filters, ordering and paging. Realtime visitors are a separate call, on the "
+         "neighbouring row of the menu."),
+        ("Will it fix numbers that look wrong?",
+         "No. If the tagging or consent setup is feeding GA4 the wrong events, the API returns "
+         "the same wrong numbers. The agent can show you the request it made, which is the first "
+         "step in finding out why."),
+    ],
+    "voices_intro": (
+        "Around 34 of the ~75 relevant posts in August 2026 were launches of one more GA4 MCP or "
+        "dashboard, several posted word for word across five subreddits. These four are people "
+        "asking for the thing rather than selling it."),
+    "voices": [
+        ("People are asking for exactly this, by name",
+         "What AI agent tools can I use to connect to the Google Analytics API and retrieve data through a chat-based conversational interface",
+         "r/GoogleAnalytics, 17 points", "https://www.reddit.com/r/GoogleAnalytics/comments/1vpw1m9/what_ai_agent_tools_can_i_use_to_connect_to_the/",
+         "Any of them, once the agent can reach a connected property. That is what the setup line "
+         "on this page does: the agent gets the report call and the token stays with treg.to."),
+        ("Writing the API call by hand fails, even with help",
+         "I asked 6 LLMs for code samples and I got 6 different answers that all failed to do the API call.",
+         "r/dataengineering", "https://www.reddit.com/r/dataengineering/comments/1im3fpx/does_anyone_know_how_to_export_the_audience/",
+         "The request body is the hard part and here nobody writes it. The agent builds it from "
+         "the question, runs it, and shows it back, so a wrong dimension name is a visible "
+         "mistake rather than a silent one."),
+        ("The API and the interface disagree",
+         "according to the interface I'm getting 2.2M event counts, whereas the API says 495k event counts for the same page.",
+         "r/GoogleAnalytics", "https://www.reddit.com/r/GoogleAnalytics/comments/vwhssp/ga4_data_api_vs_interface_discrepancy/",
+         "No relay can settle this, and this page will not claim to. Both numbers can be correct "
+         "for two differently scoped requests. What the agent adds is the request itself, in the "
+         "open, so you can see which shape produced which number."),
+        ("The data is visible on screen and still out of reach",
+         "I feel like I'm missing something obvious in GA4 about how to get at that data since I can SEE it right there",
+         "r/GoogleAnalytics", "https://www.reddit.com/r/GoogleAnalytics/comments/1n09huf/export_daily_views_data_for_a_single_page/",
+         "Daily views for one page is a two-line report on the API: a date dimension, a page "
+         "filter, a views metric. Ask for it in those words and the agent returns the table, no "
+         "export ritual."),
+    ],
+    "related": ("Search Console: clicks, impressions and top queries", "Realtime visitors on your site",
+                "Is this page indexed, and why not", "Your own campaign performance"),
+}
