@@ -2199,3 +2199,91 @@ USE_CASE_PAGES[("seo", "how-ai-answers-mention-your-brand")] = {
     "related": ("Google results for a keyword", "Keywords a domain ranks for",
                 "Backlink profile of a domain", "Search Console: clicks, impressions and top queries"),
 }
+
+USE_CASE_PAGES[("connect-your-own-accounts", "your-google-business-profile-reviews-and-reply-to-them")] = {
+    "label": "Your Google Business Profile reviews, and reply to them",
+    "sentence": "Google Business Profile API: your Google reviews, read and replied to by your agent",
+    "title": "Google Business Profile API: read and reply to reviews | treg.to",
+    "lede": (
+        "Connect the Google Business Profile you already manage and your agent can read every "
+        "review on every location, and reply as the business. This is the Google My Business API "
+        "as it is now called, on your own account, so treg.to never meters it; and the API access "
+        "request that stops most people at zero quota is one treg.to has already made."),
+    "prompt": "Using treg, list every review on our Austin location from the last 30 days with three "
+              "stars or fewer, draft a reply to each in our voice, and post them only after I approve.",
+    "prompt_why": [
+        ("Connect once", "One consent screen for the Google account that manages the listing. No Cloud project of your own."),
+        ("Name the location", "A profile holds many locations; the reviews call is per location, or batched across them."),
+        ("Keep a human gate on replies", "A reply publishes under the business name. Ask for drafts, then approve."),
+        ("It costs nothing", "Your own account, so the call is never metered."),
+    ],
+    "result_image": None,
+    "what_is_heading": "What is the Google Business Profile API?",
+    "what_is": (
+        "The Google Business Profile API, formerly the Google My Business API, is how a business "
+        "reads and manages its own listings on Google Search and Maps as data: locations, hours, "
+        "posts, performance, and the customer reviews with their star rating, text and date, plus "
+        "the reply the business has posted to each. It is scoped to listings the connected account "
+        "owns or manages. It is not a way to read another business's reviews; that is a separate "
+        "job on the menu."),
+    "notes": [
+        "The gate on this API is not the OAuth scope, it is the access request. Google starts every "
+        "Cloud project at zero requests a day on the Business Profile API until it approves the "
+        "project, and that is the wall in most of the forum posts. The request belongs to the "
+        "project making the call, and that project is treg.to's: you consent, you do not apply.",
+        "Reviews still live on the older v4 surface while the rest of the profile moved to the v1 "
+        "services, so the review calls take an account id and a location id rather than a resource "
+        "name. Your agent lists accounts first, then locations, then reviews; a batch endpoint "
+        "reads reviews across several locations in one call.",
+        "Replying is an action, not a read. The reply publishes publicly under the business name, "
+        "it can be edited or deleted later through the same API, and a reply signals to Google that "
+        "the review is a real customer's. Ask the agent to draft, and to flag anything that reads "
+        "like a policy violation before you answer it rather than after.",
+    ],
+    "faq": [
+        ("Does this cost anything?",
+         "No. The Business Profile API runs on your own Google account, so treg.to relays the call "
+         "and meters nothing. Only calls on treg.to's own provider keys are billed."),
+        ("Do I need to apply for Google Business Profile API access?",
+         "No. Google grants that access to the Cloud project making the calls, and treg.to holds "
+         "the approved app. You need to be an owner or manager of the listing, and to consent once."),
+        ("Can my agent read a competitor's reviews this way?",
+         "No. The API returns only the listings your connected account manages. Reading any "
+         "business's public reviews is the neighbouring job, served by scraping providers."),
+        ("Does it work across several locations?",
+         "Yes. The reviews call is per location, and there is a batch call that reads reviews "
+         "across several of your listings at once. The agent lists your locations first."),
+    ],
+    "voices_intro": (
+        "The Google Business Profile subreddits are a queue of people waiting on Google. From ~40 "
+        "Reddit and X posts in August 2026, ten were vendors selling reply tools, including one "
+        "study posted word for word to two subreddits. These four are people stuck at the door."),
+    "voices": [
+        ("The access request gets rejected, even when you follow the rules",
+         "GBP API access rejected even though I followed their \"client account\" rule?",
+         "r/GoogleMyBusiness", "https://www.reddit.com/r/GoogleMyBusiness/comments/1sx6686/gbp_api_access_rejected_even_though_i_followed/",
+         "The request is judged per Cloud project, and it is opaque: several posters waited weeks "
+         "with no reply at all. That is the part treg.to takes off the table. You are consenting "
+         "to an app that already has access, not applying for your own."),
+        ("Approved, and the quota is still zero",
+         "I'm currently stuck with the Google Business Profile API where the quota is set to 0 and the API is basically unusable.",
+         "r/localseo", "https://www.reddit.com/r/localseo/comments/1r64f1s/google_business_profile_api_quota_stuck_at_0_has/",
+         "Zero is the default for every new project and the quota bump is a second request. Both "
+         "belong to the project, not the user, which is why a hosted connection helps here and a "
+         "tutorial does not."),
+        ("It only ever shows you your own listing",
+         "Google's own APIs will hand you your own listing and nothing else.",
+         "r/n8n", "https://www.reddit.com/r/n8n/comments/1vms0uu/i_built_a_free_template_that_logs_every/",
+         "True, and this page will not pretend otherwise. This job is your reviews; a competitor's "
+         "public reviews are the neighbouring job, on Yelp, TripAdvisor and Trustpilot, and the "
+         "local pack comes through the SERP providers."),
+        ("Replying to a bad review can make it harder to remove",
+         "if you reply to the review, it treats it as a real customer, making it harder to get it taken down.",
+         "X, 142 likes", "https://x.com/i/status/2090034289811288369",
+         "One reason to keep the reply step behind your approval. Have the agent read each new "
+         "review against Google's review policy first and flag the ones worth reporting, then reply "
+         "to the rest."),
+    ],
+    "related": ("A business's reviews", "Find local businesses by keyword and location",
+                "Search terms that surfaced your listing on Maps", "Search Console: clicks, impressions and top queries"),
+}
