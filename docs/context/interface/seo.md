@@ -278,7 +278,7 @@ what makes it a template rather than one page's prose:
 
 | Form | Condition | Renders |
 |---|---|---|
-| `short` | one provider | "How it works": the one call, on the reader's own account. No comparison |
+| `short` | one provider | "How it works": the one call. Own-account copy when the cost is `free`; otherwise the rate and the $0.000 markup. No comparison |
 | `platforms` | the job spans several platforms | providers grouped per platform, cheapest claimed per platform |
 | `compare` | several providers, one platform | the full comparison |
 
@@ -320,7 +320,7 @@ requires `voices` and `voices_intro` together rather than requiring either.
 say it anyway. Write position-neutral ("the comparison above", "the prices here") or the sentence
 is wrong for every reader who scrolls.
 
-**Written so far: 17 of the 66 jobs**, and from 2026-08-24 the remaining set is no longer "all of
+**Written so far: 22 of the 66 jobs**, and from 2026-08-24 the remaining set is no longer "all of
 them". Every unwritten job was measured against Google Ads keyword volume that day; the ones
 clearing 50 US searches a month became a worklist ordered by volume, and the rest are parked as
 rows on the menu with no page. A page nobody searches for is the scaled-content shape the risk
@@ -349,6 +349,18 @@ its `cost_view` carries no USD and the page labelled the dearest option on it as
 reader's own account. Free is now read off the cost's own `type`; anything else without a figure
 prints "no dollar rate published", which is what the pages say about Semrush in prose too. It was
 found by reading the rendered page, which is the argument for that step in the skill.
+
+**A trial-pool row is a fourth state, and a metered single provider is not an own-account one**
+(2026-08-25). Finnhub, Tiingo and Twelve Data are served at $0 on treg.to's own free-tier keys with
+a per-team daily allowance (`catalog.trial_pools`); `cost_view` gives them `usd == 0`, so they fell
+through to "free, your own account", and with no priced row on the page the hero and the `{cheapest}`
+placeholder said the same. `_uc_providers` now carries `trial` (calls per team per day) and the
+cell, the `.md` table, the hero and `{cheapest}` state the allowance ("free, 50 calls a day on
+treg.to's key, then your own key"). Separately, the `short` form assumed its one provider was an
+OAuth connection; the AI-mentions job has one provider, DataForSEO, and it is metered, so the form
+branches on the row's `free` flag: `metered_single` states the rate and the markup, and the meta
+description does not claim "never metered". Both were found the same way as the Semrush one: by
+reading the stock and AI-visibility pages after the tests went green.
 
 Nested under the category on purpose: the five flat ad pages keep their URLs and `build_html.py`
 ownership, and `test_legacy_flat_use_case_pages_still_answer` proves the nested route cannot shadow
