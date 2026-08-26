@@ -30,9 +30,10 @@ related:
 
 # The API
 
-Route definitions live on `api.router`; the email OTP and CLI pairing blocks are defined in `routers.auth`, the open
-Catalog JSON block is defined in `routers.catalog`, the three presentation blocks are defined in
-`routers.web`, and the two cross-tenant admin read/report blocks are defined in `routers.admin`.
+Route definitions live on `api.router`; the social login, CLI pairing, session identity, and email OTP
+blocks are defined in `routers.auth`, the open Catalog JSON block is defined in `routers.catalog`, the
+three presentation blocks are defined in `routers.web`, and the two cross-tenant admin read/report
+blocks are defined in `routers.admin`.
 `api.py` attaches each block at its original registration point. `bootstrap.create_app()` assembles
 the combined route table into FastAPI roles.
 `api.app` remains the deployed, backward-compatible `all` role. Everything the CLI + skill do is one
@@ -101,10 +102,12 @@ The three short-lived process-local dictionaries live with that state machine ra
 boundary. Router and API compatibility aliases reference the same dictionary objects, so social-login
 callbacks and existing tests cannot split handshake state through a copy or rebind.
 
-`api.py` attaches the router at the original point after the GitHub and Google callbacks, preserving
-the route snapshot. During the staged social-login move, `api.py` binds its existing shared
-`_auth_page` helper into that router; the next auth journey removes this temporary composition seam
-when the shared presentation helper moves with its other callers.
+The GitHub and Google entry/callback handlers now live in the preceding social-login router block,
+along with their callback-host and shared auth-page helpers. The callbacks still add and pop individual
+entries through the application-owned `_cli_states` dictionary alias, so moving the HTTP handlers does
+not split the CLI handshake state. A separate session-identity block after CLI pairing owns `/auth/me`
+and `/auth/logout`. `api.py` attaches all four auth blocks at their original points, preserving the
+route snapshot, and re-exports the same handler and helper objects for compatibility.
 
 ## Endpoints
 - **Users / orgs:** `register_user` (`POST /users`, open, legacy — used by the test fixture) creates the

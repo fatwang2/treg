@@ -133,6 +133,10 @@ from .routers.auth import (
     EmailStartIn,
     EmailVerifyIn,
     _AUTH_HEAD,
+    _auth_page,
+    _finish_oauth_login,
+    _intercom_user_hash,
+    _login_callback_base,
     _LOGIN_CSS,
     _LOGIN_ID_RE,
     _LOGIN_JS,
@@ -152,6 +156,12 @@ from .routers.auth import (
     auth_cli_start,
     auth_email_start,
     auth_email_verify,
+    auth_github,
+    auth_github_callback,
+    auth_google,
+    auth_google_callback,
+    auth_logout,
+    auth_me,
     login_page,
 )
 from .routers.auth_helpers import (
@@ -274,19 +284,6 @@ _REDIRECT_PATHS = {"/", "/login", "/terms", "/privacy", "/support", "/contact", 
 # sign in. Exact paths only; the /callback routes (and POST /oauth/authorize, the consent approval)
 # must keep serving in place — the middleware only touches GET/HEAD.
 _REDIRECT_ALWAYS = {"/auth/github", "/auth/google", "/oauth/authorize"}
-
-
-def _login_callback_base(request: Request) -> str:
-    """The base URL a GitHub/Google login round-trip is anchored to. Normally `public_url` — but
-    the provider compares the exchange's `redirect_uri` byte-for-byte against the one the
-    authorization request named, so a flow living on a legacy host (a login in flight across the
-    cutover deploy, with its state cookie and provider registration both on the old name) must
-    keep building the OLD host's callback. Any recognized alias Host therefore wins — in BOTH
-    directions, so a login minted on treg.to also survives a TREG_PUBLIC_URL rollback."""
-    host = request.headers.get("host", "").split(":")[0].rstrip(".").lower()
-    if host in PUBLIC_HOST_ALIASES:
-        return f"https://{host}"
-    return get_settings().public_url.rstrip("/")
 
 
 class _LegacyHostRedirectMiddleware:
@@ -633,212 +630,16 @@ async def create_tool_request(
             "note": "logged — requests steer which provider gets keyed next"}
 
 
-# ---- human login via GitHub OAuth (dashboard sessions) ------------------------------------
-@app.get("/auth/github")
-async def auth_github(request: Request, cli: str = ""):
-    s = get_settings()
-    if not s.github_client_id:
-        raise HTTPException(status_code=503, detail="GitHub login not configured")
-    redirect = f"{_login_callback_base(request)}/auth/github/callback"
-    state = crypto.new_token()
-    if cli:  # this is a `treg login` handshake, not a browser session
-        _prune_handshakes()  # evict abandoned handshakes so this map can't grow unbounded
-        _cli_states[state] = (cli, _utcnow_naive())
-    url = (f"{s.github_authorize_url}?client_id={s.github_client_id}"
-           f"&redirect_uri={quote(redirect, safe='')}&scope={quote('read:user user:email')}&state={state}")
-    resp = RedirectResponse(url, status_code=302)
-    resp.set_cookie("treg_oauth_state", state, httponly=True, max_age=600, samesite="lax", secure=_is_https(request))
-    return resp
+# Register the moved social-login routes at their original position.
+router.routes.extend(auth_routes.social_router.routes)
 
 
-def _auth_page(headline: str, sub: str = "", *, ok: bool = True, status: int = 200) -> HTMLResponse:
-    """A brand-styled full-page response for the browser-facing auth flow (GitHub callback)."""
-    sub_html = f"<p>{sub}</p>" if sub else ""
-    html = (
-        f'{_AUTH_HEAD}<body><div class="wrap"><div class="card">'
-        f'<div class="logo">▚ tools-registry</div><div class="mark">{"✅" if ok else "⚠️"}</div>'
-        f"<h1>{headline}</h1>{sub_html}</div></div></body></html>"
-    )
-    return HTMLResponse(html, status_code=status)
-
-
-def _finish_oauth_login(request: Request, user: User, st: tuple | None) -> RedirectResponse:
-    """After a GitHub/Google callback proves an identity: set the browser session cookie, then either
-    land on the dashboard (a plain browser login) or bounce to /login?cli=<id> so a `treg login`
-    handshake goes through the SAME team picker as the other doors (instead of completing blind — which
-    would leave the CLI guessing the org). The picker's POST /auth/cli/approve reads this same cookie."""
-    login_id = st[0] if st is not None else None
-    dest = f"/login?cli={login_id}" if login_id else "/app"
-    resp = RedirectResponse(dest, status_code=302)
-    resp.set_cookie(sess.COOKIE, sess.make(user.id, token_version=user.token_version), httponly=True,
-                    samesite="lax", secure=_is_https(request), max_age=sess.TTL_SECONDS)
-    resp.delete_cookie("treg_oauth_state")
-    return resp
-
-
-@app.get("/auth/github/callback")
-async def auth_github_callback(
-    request: Request, code: str = "", state: str = "",
-    treg_oauth_state: str = Cookie(default=""), db: AsyncSession = Depends(get_session),
-):
-    if not code or not state or state != treg_oauth_state:  # CSRF: state must echo our cookie
-        return _auth_page("Login failed", "Bad state. Please start the login again.", ok=False, status=400)
-    s = get_settings()
-    client = request.app.state.http
-    try:
-        tok = (await client.post(
-            s.github_token_url, headers={"Accept": "application/json"},
-            data={"client_id": s.github_client_id, "client_secret": s.github_client_secret,
-                  "code": code, "redirect_uri": f"{_login_callback_base(request)}/auth/github/callback"},
-        )).json()
-        access = tok.get("access_token")
-        if not access:
-            return _auth_page("Login failed", "No access token from GitHub.", ok=False, status=400)
-        gh = {"Authorization": f"Bearer {access}", "Accept": "application/json", "User-Agent": "treg"}
-        prof = (await client.get(f"{s.github_api_url}/user", headers=gh)).json()
-        email = prof.get("email")
-        if not email:
-            emails = (await client.get(f"{s.github_api_url}/user/emails", headers=gh)).json()
-            if isinstance(emails, list):
-                email = (next((e["email"] for e in emails if e.get("primary") and e.get("verified")), None)
-                         or next((e["email"] for e in emails if e.get("verified")), None))
-        if not email:
-            return _auth_page("Login failed", "No verified email on your GitHub account.", ok=False, status=400)
-    except Exception as exc:  # noqa: BLE001
-        print(f"[auth] github callback error: {exc}")  # keep internals server-side, not in the response
-        return _auth_page("Login failed", "Something went wrong. Please try again.", ok=False, status=502)
-
-    user = await _find_or_create_user(db, email)  # first login = registration (user only; no auto org)
-    if user.suspended:  # a banned account may prove its email but must not receive a live session
-        return _auth_page("Account suspended", "This account has been suspended.", ok=False, status=403)
-    await db.commit()
-
-    # Browser session OR `treg login` handshake — both go through the /login team picker now.
-    return _finish_oauth_login(request, user, _cli_states.pop(state, None))
-
-
-@app.get("/auth/google")
-async def auth_google(request: Request, cli: str = ""):
-    """Human login via Google OAuth — a parallel door to GitHub, same session/CLI-handshake plumbing."""
-    s = get_settings()
-    if not s.google_client_id:
-        raise HTTPException(status_code=503, detail="Google login not configured")
-    redirect = f"{_login_callback_base(request)}/auth/google/callback"
-    state = crypto.new_token()
-    if cli:  # a `treg login` handshake, not a browser session
-        _prune_handshakes()
-        _cli_states[state] = (cli, _utcnow_naive())
-    url = (f"{s.google_authorize_url}?client_id={s.google_client_id}"
-           f"&redirect_uri={quote(redirect, safe='')}&response_type=code"
-           f"&scope={quote('openid email profile')}&state={state}&prompt=select_account")
-    resp = RedirectResponse(url, status_code=302)
-    resp.set_cookie("treg_oauth_state", state, httponly=True, max_age=600, samesite="lax", secure=_is_https(request))
-    return resp
-
-
-@app.get("/auth/google/callback")
-async def auth_google_callback(
-    request: Request, code: str = "", state: str = "",
-    treg_oauth_state: str = Cookie(default=""), db: AsyncSession = Depends(get_session),
-):
-    if not code or not state or state != treg_oauth_state:  # CSRF: state must echo our cookie
-        return _auth_page("Login failed", "Bad state. Please start the login again.", ok=False, status=400)
-    s = get_settings()
-    client = request.app.state.http
-    try:
-        tok = (await client.post(
-            s.google_token_url, headers={"Accept": "application/json"},
-            data={"client_id": s.google_client_id, "client_secret": s.google_client_secret,
-                  "code": code, "grant_type": "authorization_code",
-                  "redirect_uri": f"{_login_callback_base(request)}/auth/google/callback"},
-        )).json()
-        access = tok.get("access_token")
-        if not access:
-            return _auth_page("Login failed", "No access token from Google.", ok=False, status=400)
-        prof = (await client.get(
-            s.google_userinfo_url,
-            headers={"Authorization": f"Bearer {access}", "Accept": "application/json"})).json()
-        email = prof.get("email")
-        if not email:
-            return _auth_page("Login failed", "No email on your Google account.", ok=False, status=400)
-        # Identity is keyed by email, so we must only trust a VERIFIED one — else an unverified Google
-        # address equal to a victim's registered email would resolve to the victim (account takeover).
-        # (Google's userinfo returns email_verified; the GitHub door already filters for verified.)
-        if not prof.get("email_verified"):
-            return _auth_page("Login failed", "Your Google email isn't verified.", ok=False, status=400)
-    except Exception as exc:  # noqa: BLE001
-        print(f"[auth] google callback error: {exc}")  # keep internals server-side, not in the response
-        return _auth_page("Login failed", "Something went wrong. Please try again.", ok=False, status=502)
-
-    user = await _find_or_create_user(db, email)  # first login = registration (user only; no auto org)
-    if user.suspended:
-        return _auth_page("Account suspended", "This account has been suspended.", ok=False, status=403)
-    await db.commit()
-
-    # Browser session OR `treg login` handshake — both go through the /login team picker now.
-    return _finish_oauth_login(request, user, _cli_states.pop(state, None))
-
-
-# Transitional binding: social-login presentation moves with the next auth journey.
-auth_routes._auth_page = _auth_page
 # Register the moved CLI pairing routes at their original position.
 router.routes.extend(auth_routes.cli_router.routes)
 
 
-def _intercom_user_hash(email: str) -> str:
-    """Intercom identity verification: HMAC-SHA256 of the identifier the dashboard boots the
-    Messenger with (the email), keyed by the workspace secret — so a third party who knows an email
-    can't impersonate that user in support chat. Empty when unconfigured (self-hosted: no widget)."""
-    secret = get_settings().intercom_secret
-    if not secret:
-        return ""
-    return hmac.new(secret.encode(), email.encode(), hashlib.sha256).hexdigest()
-
-
-@app.get("/auth/me")
-async def auth_me(
-    x_treg_token: str = Header(default=""),
-    treg_session: str = Cookie(default=""),
-    db: AsyncSession = Depends(get_session),
-) -> dict:
-    """Who is the caller? Drives the dashboard's identity display in BOTH session mode (cookie) and
-    token mode (X-Treg-Token) — the token door otherwise had no way to learn its own email, which
-    broke `isPersonal` and join-by-code."""
-    membership = None
-    if x_treg_token:
-        m = await _membership_by_token(x_treg_token, db)
-        membership = m
-        user = await db.get(User, m.user_id) if m else await _user_from_identity_token(x_treg_token, db)
-        if user is not None and user.suspended:
-            user = None
-    else:
-        user = await _user_from_session(treg_session, db)
-    if user is None:
-        raise HTTPException(status_code=401, detail="no session")
-    out = {"email": user.email, "is_superadmin": user.is_superadmin, "onboarded": user.onboarded,
-           "github": bool(get_settings().github_client_id)}
-    if (ich := _intercom_user_hash(user.email)):
-        out["intercom_user_hash"] = ich
-    if membership is not None:
-        # The org this token IS. A machine identity cannot call GET /orgs — `require_identity`
-        # refuses it on purpose, since `create_org` hangs off that dependency and an agent could
-        # otherwise mint an org it owns. But it still has to learn its OWN org id to reach any
-        # /orgs/{id}/... route, and being unable to told `treg balance` there was "no active org".
-        org = await db.get(Org, membership.org_id)
-        out |= {"org_id": membership.org_id, "org": org.slug if org else None,
-                "role": membership.role}
-    return out
-
-
-@app.post("/auth/logout")
-async def auth_logout(request: Request) -> JSONResponse:
-    # A cross-site auto-submitted form could force-logout the victim (the cookie delete is a "simple"
-    # request). Bind it to same-origin: reject a request whose Origin isn't treg's own.
-    if not _same_origin(request):
-        raise HTTPException(status_code=403, detail="cross-origin logout rejected")
-    resp = JSONResponse({"ok": True})
-    resp.delete_cookie(sess.COOKIE)
-    return resp
+# Register the moved session identity routes at their original position.
+router.routes.extend(auth_routes.session_router.routes)
 
 
 # Register the moved email OTP routes at their original position.
