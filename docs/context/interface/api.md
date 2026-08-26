@@ -6,12 +6,14 @@ sources:
   - src/treg/api.py
   - src/treg/caller_metadata.py
   - src/treg/application/auth.py
+  - src/treg/application/connect.py
   - src/treg/application/signup.py
   - src/treg/routers/__init__.py
   - src/treg/routers/admin.py
   - src/treg/routers/auth.py
   - src/treg/routers/auth_helpers.py
   - src/treg/routers/catalog.py
+  - src/treg/routers/connections.py
   - src/treg/routers/orgs.py
   - src/treg/routers/resources.py
   - src/treg/routers/signup_cookies.py
@@ -36,7 +38,8 @@ related:
 
 Route definitions live on `api.router`; login, session, invite, OAuth-server, and grant-management blocks
 are defined in `routers.auth`; the open Catalog JSON block is defined in `routers.catalog`; the
-three presentation blocks are defined in `routers.web`; and the cross-tenant admin read, mutation,
+three presentation blocks are defined in `routers.web`; connection establishment is defined in
+`routers.connections`; and the cross-tenant admin read, mutation,
 and report blocks are defined in `routers.admin`.
 `api.py` attaches each block at its original registration point. `bootstrap.create_app()` assembles
 the combined route table into FastAPI roles.
@@ -116,6 +119,10 @@ project, policy, settings, usage, and budget HTTP; `routers.resources` translate
 and bundle HTTP. `application.signup` owns the two creation
 transactions and their promo, conversion, and referral sequence; `domain.governance.teams` owns team
 slug and membership creation plus the team-switcher read model.
+
+`application.connect` owns OAuth-start, OAuth-callback, pasted-token, status, and provider-companion
+backfill sessions and commit ordering. Provider exchanges and pasted-token probes use the shared HTTP
+client supplied by `routers.connections`.
 
 ## Endpoints
 - **Users / orgs:** `register_user` (`POST /users`, open, legacy — used by the test fixture) creates the

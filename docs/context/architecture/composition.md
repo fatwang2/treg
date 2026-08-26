@@ -3,10 +3,12 @@ title: Application composition and deployment roles
 status: shipped
 sources:
   - src/treg/bootstrap.py
+  - src/treg/application/connect.py
   - src/treg/domain/identity/mcp_oauth.py
   - src/treg/domain/identity/session.py
   - src/treg/routers/admin.py
   - src/treg/routers/auth.py
+  - src/treg/routers/connections.py
   - src/treg/routers/orgs.py
   - src/treg/routers/resources.py
   - src/treg/routers/web.py
@@ -24,7 +26,8 @@ related:
 the auth module defines login, session, invite, user-token, OAuth-server, and grant-management blocks;
 the org module defines signup, team-entry, invite-lifecycle, member-management, machine-identity,
 project, policy, settings, usage, and budget blocks; the resources module defines secret, tool, skill,
-and bundle blocks; the Catalog and web modules define their concern-specific blocks; and the admin
+and bundle blocks; the connections module defines OAuth and pasted-token establishment blocks; the
+Catalog and web modules define their concern-specific blocks; and the admin
 module defines read, mutation, and report blocks that `api.py`
 appends at their legacy registration points. It then calls the factory once at EOF so the deployed
 and documented `treg.api:app` import path remains the default `all` role.
