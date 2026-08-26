@@ -30,8 +30,8 @@ related:
 
 # The API
 
-Route definitions live on `api.router`; the social-login, CLI-pairing, session-identity, email-OTP, and
-invite-sign-in blocks are defined in `routers.auth`; the open Catalog JSON block is defined in `routers.catalog`; the
+Route definitions live on `api.router`; login, session, invite, OAuth-server, and grant-management blocks
+are defined in `routers.auth`; the open Catalog JSON block is defined in `routers.catalog`; the
 three presentation blocks are defined in `routers.web`, and the two cross-tenant admin read/report
 blocks are defined in `routers.admin`.
 `api.py` attaches each block at its original registration point. `bootstrap.create_app()` assembles
