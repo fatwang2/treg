@@ -2,6 +2,7 @@
 title: MCP — the front door for assistants, and treg as an OAuth authorization server
 status: shipped
 sources:
+  - src/treg/application/auth.py
   - src/treg/mcp.py
   - src/treg/mcp_oauth.py
   - src/treg/domain/identity/health.py
@@ -193,13 +194,12 @@ not mask the transport guard.
 Elsewhere treg speaks OAuth as a **client** (`oauth.py` signs in with GitHub, connects a provider
 account). Here it is the thing that **issues** tokens. Different direction, different module.
 
-`routers.auth` defines the ordered authorization-server and grant-management HTTP blocks. The identity
-leaf owns token/resource validation and grant-family primitives in `domain.identity.mcp_oauth`;
-`treg.mcp_oauth` remains a compatibility alias. Its client-metadata fetch performs a lazy sibling import
-named `health`, so `domain.identity.health` aliases the root credential-network safety module. Both paths
-retain the same module object and monkeypatch target rather than creating duplicate implementations.
-
-Metadata and `aud` checks precede token issuance.
+`routers.auth` owns OAuth HTTP translation and consent rendering. `application.auth` sequences client
+registration, authorization, code exchange, refresh rotation/replay response, revocation, and grant-team
+changes; it opens each session and owns every commit. The identity leaf owns token/resource validation and
+grant-family primitives in `domain.identity.mcp_oauth`; `treg.mcp_oauth` remains a compatibility alias.
+Its client-metadata fetch imports `health` lazily, and `domain.identity.health` aliases the root
+credential-network safety module so both paths retain one module object and monkeypatch target.
 
 ## The `aud` claim carries the weight
 

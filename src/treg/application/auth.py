@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import hmac
 import secrets as _secrets
 from urllib.parse import quote
@@ -13,9 +13,10 @@ from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from .. import crypto, db as database, demo as demo_seed, email as email_sender, ratestore
+from .. import audit, crypto, db as database, demo as demo_seed, email as email_sender, ratestore
 from ..config import get_settings
 from ..domain.identity import session as sess
+from ..domain.identity import mcp_oauth
 from ..domain.identity.access import (
     _is_machine_email,
     _membership_by_token,
@@ -24,7 +25,14 @@ from ..domain.identity.access import (
     _user_from_identity_token,
     _user_from_session,
 )
-from ..models import Invite, Membership, Org, Tool, User
+from ..domain.identity.mcp_oauth import (
+    _ensure_grant,
+    _family_org,
+    _issue_refresh,
+    _refresh_is_live,
+    _revoke_refresh_family,
+)
+from ..models import Invite, Membership, OAuthClient, OAuthCode, OAuthRefresh, Org, Tool, User
 from ..timeutil import as_naive as _as_naive
 from ..timeutil import utcnow_naive as _utcnow_naive
 from . import signup
@@ -38,6 +46,7 @@ OTP_START_NS = "otp_start"
 OTP_START_WINDOW_S = 900      # 15 minutes
 OTP_START_MAX_PER_EMAIL = 5   # code requests for one inbox per window (caps bombing a single victim)
 OTP_START_MAX_PER_IP = 30     # code requests from one IP per window (looser — offices/NAT share an IP)
+AUTH_CODE_TTL_S = 300   # a code is redeemed within seconds; five minutes is generous, not a window
 
 
 # In-memory handshake state for `treg login` (single-instance; short-lived, fine to lose on restart).
@@ -101,6 +110,27 @@ class InviteSigninError(Exception):
         super().__init__(kind)
 
 
+class OAuthServerError(Exception):
+    """A framework-neutral OAuth refusal translated by the HTTP router."""
+
+    def __init__(
+        self, error: str, description: str, *, status: int = 400, redirect: bool = False,
+    ):
+        self.error = error
+        self.description = description
+        self.status = status
+        self.redirect = redirect
+        super().__init__(error)
+
+
+class OAuthGrantError(Exception):
+    """A framework-neutral grant-management refusal translated by the HTTP router."""
+
+    def __init__(self, detail: str):
+        self.detail = detail
+        super().__init__(detail)
+
+
 @dataclass(frozen=True)
 class VerifiedEmail:
     token: str
@@ -149,6 +179,16 @@ class InviteCodePrefill:
 class InviteSigninProof:
     destination: str
     session_cookie: str
+
+
+@dataclass(frozen=True)
+class OAuthAuthorizationView:
+    client_id: str
+    client_name: str
+    client_uri: str
+    client_kind: str
+    user_email: str
+    teams: list[dict]
 
 
 async def start_email_login(email: str, client_ip: str) -> dict:
@@ -531,3 +571,436 @@ async def confirm_invite_signin(email_token: str) -> InviteSigninProof:
             destination=destination,
             session_cookie=sess.make(user.id, token_version=user.token_version),
         )
+
+
+async def register_oauth_client(
+    *, client_name: str, redirect_uris: list[str], client_uri: str, logo_uri: str, scope: str,
+) -> dict:
+    uris = [u for u in redirect_uris if mcp_oauth.valid_redirect_uri(u)]
+    if not uris:
+        raise OAuthServerError(
+            "invalid_redirect_uri",
+            "at least one https redirect_uri is required (http is accepted only for 127.0.0.1 / localhost, for CLI clients)",
+        )
+    async with database.session_maker() as db:
+        client = OAuthClient(
+            client_id=mcp_oauth.new_client_id(), kind="dcr",
+            client_name=(client_name or "unnamed client")[:200],
+            client_uri=client_uri[:500], logo_uri=logo_uri[:500],
+            redirect_uris=uris[:20], scope=scope[:200])
+        db.add(client)
+        await db.commit()
+        return {
+            "client_id": client.client_id,
+            "client_id_issued_at": int(client.created_at.timestamp()),
+            "client_name": client.client_name,
+            "redirect_uris": client.redirect_uris,
+            "grant_types": ["authorization_code", "refresh_token"],
+            "response_types": ["code"],
+            "token_endpoint_auth_method": "none",
+        }
+
+
+async def _resolve_oauth_client(client_id: str, db: AsyncSession) -> OAuthClient | None:
+    """One client row, whichever door it came through.
+
+    A registered client is a lookup. A client_id that is an https URL is a metadata document: fetched
+    on first sight, cached as a row, and refreshed when stale — documents change, and a cache that
+    never expires would pin a client to redirect URIs it has since retired.
+    """
+    row = (await db.execute(select(OAuthClient).where(OAuthClient.client_id == client_id))
+           ).scalar_one_or_none()
+    fresh_enough = row is not None and (
+        row.kind != "cimd" or (row.refreshed_at is not None and
+                               (datetime.now(timezone.utc).replace(tzinfo=None) - row.refreshed_at
+                                ).total_seconds() < mcp_oauth._CIMD_REFRESH_S))
+    if fresh_enough:
+        return row
+    if not client_id.startswith("https://"):
+        return row  # a dcr client we do not know is simply unknown
+    doc = await mcp_oauth.fetch_client_id_metadata(client_id)
+    if doc is None:
+        return row  # keep a stale copy over nothing: a transient fetch failure is not a revocation
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    if row is None:
+        row = OAuthClient(client_id=client_id, kind="cimd")
+        db.add(row)
+    row.kind, row.refreshed_at = "cimd", now
+    row.client_name, row.client_uri = doc["client_name"], doc["client_uri"]
+    row.logo_uri, row.redirect_uris, row.scope = doc["logo_uri"], doc["redirect_uris"], doc["scope"]
+    await db.commit()
+    await db.refresh(row)
+    return row
+
+
+def _wrong_resource(resource: str) -> str | None:
+    """Is this `resource` one we actually protect? Returns an error message, or None if fine.
+
+    Refusing early matters more than it looks. `resource` becomes the token's audience, and the MCP
+    server accepts only its own — so accepting a resource we do not serve mints a token that is
+    valid, well-formed, and silently useless. That failure surfaces later, at the first tool call,
+    as "not signed in", which points the reader at authentication when the real problem was the
+    audience. Found exactly that way: an independent MCP client sent the URL it was connecting to
+    rather than the canonical identifier from our metadata, and got a token that could never work.
+
+    Empty is allowed: a client that omits `resource` gets our canonical one, which is what it would
+    have discovered anyway.
+    """
+    if not resource:
+        return None
+    canonical = mcp_oauth.mcp_resource_url()
+    # The legacy hosts' resource URLs stay valid: a pre-move client discovered its `resource` from
+    # the old domain's metadata and will keep sending it for the lifetime of the grant.
+    if any(resource.rstrip("/") == aud.rstrip("/") for aud in mcp_oauth.mcp_resource_audiences()):
+        return None
+    return (f"this server issues tokens for {canonical} only — use the `resource` value from "
+            f"/.well-known/oauth-protected-resource")
+
+
+def _same_mcp_resource(a: str, b: str) -> bool:
+    """Whether two `resource` values name this same MCP server. Exact match, slash-variant match,
+    or BOTH normalize into the canonical+legacy audience set — the domain move renamed the
+    resource without changing it, so a grant consented on one name must stay exchangeable and
+    refreshable by a client re-based onto the other (in either direction)."""
+    na, nb = mcp_oauth.normalize_resource(a), mcp_oauth.normalize_resource(b)
+    if a == b or na == nb:
+        return True
+    auds = mcp_oauth.mcp_resource_audiences()
+    return na in auds and nb in auds
+
+
+async def _authorize_request(client_id: str, redirect_uri: str, response_type: str,
+                             code_challenge: str, code_challenge_method: str,
+                             db: AsyncSession) -> OAuthClient:
+    """Validate the client and redirect before any refusal is allowed to redirect.
+
+    Order matters and is deliberate: identify the client and its redirect FIRST, because until both
+    are known-good there is nowhere safe to send an error. Everything after that can be reported to
+    the client properly.
+    """
+    client = await _resolve_oauth_client(client_id, db) if client_id else None
+    if client is None:
+        raise OAuthServerError(
+            "invalid_client",
+            "unknown client_id — register first, or serve a client-id metadata document",
+        )
+    if not mcp_oauth.redirect_uri_allowed(client, redirect_uri):
+        # NOT a redirect: we do not bounce errors to a URI the client has not proven is theirs.
+        raise OAuthServerError(
+            "invalid_request",
+            "redirect_uri does not exactly match one registered for this client",
+        )
+    return client
+
+
+def _redirect_refusal(error: str, description: str) -> OAuthServerError:
+    return OAuthServerError(error, description, redirect=True)
+
+
+async def prepare_oauth_authorization(
+    *, client_id: str, redirect_uri: str, response_type: str, code_challenge: str,
+    code_challenge_method: str, resource: str, session_cookie: str,
+) -> OAuthAuthorizationView | None:
+    async with database.session_maker() as db:
+        client = await _authorize_request(
+            client_id, redirect_uri, response_type, code_challenge, code_challenge_method, db,
+        )
+        if response_type != "code":
+            raise _redirect_refusal(
+                "unsupported_response_type", "only the authorization code flow is supported",
+            )
+        if not code_challenge or code_challenge_method != "S256":
+            raise _redirect_refusal(
+                "invalid_request", "PKCE with code_challenge_method=S256 is required",
+            )
+        if (bad_target := _wrong_resource(resource)) is not None:
+            raise _redirect_refusal("invalid_target", bad_target)
+
+        user = await _user_from_session(session_cookie, db)
+        if user is None:
+            return None
+
+        memberships = (await db.execute(
+            select(Membership).where(Membership.user_id == user.id))).scalars().all()
+        teams = []
+        for membership in memberships:
+            org = await db.get(Org, membership.org_id)
+            if org is not None and not org.suspended:
+                # The BALANCE belongs on this list. Choosing a team here decides which balance the
+                # client spends for the life of the grant, and a list of slugs makes the one question
+                # that matters — "which of these can actually pay?" — invisible at the moment of
+                # choosing. Unclecode picked a $0.00 team on the first real ChatGPT connect and the call
+                # was refused; nothing on the page could have told him.
+                teams.append({"org_id": org.id, "slug": org.slug, "role": membership.role,
+                              "balance_usd": round((org.balance_micro or 0) / 1_000_000, 4)})
+        if not teams:
+            raise _redirect_refusal(
+                "access_denied", "this account is not a member of any team",
+            )
+        return OAuthAuthorizationView(
+            client_id=client.client_id,
+            client_name=client.client_name,
+            client_uri=client.client_uri,
+            client_kind=client.kind,
+            user_email=user.email,
+            teams=teams,
+        )
+
+
+async def approve_oauth_authorization(
+    *, decision: str, client_id: str, redirect_uri: str, response_type: str, scope: str,
+    code_challenge: str, code_challenge_method: str, resource: str, org_id: int,
+    session_cookie: str,
+) -> str:
+    async with database.session_maker() as db:
+        client = await _authorize_request(
+            client_id, redirect_uri, response_type, code_challenge, code_challenge_method, db,
+        )
+        if decision != "allow":
+            # Cancel is a real answer and the client is entitled to hear it, rather than hang.
+            raise _redirect_refusal("access_denied", "the user declined")
+        if (bad_target := _wrong_resource(resource)) is not None:
+            raise _redirect_refusal("invalid_target", bad_target)
+        if not code_challenge or code_challenge_method != "S256":
+            raise _redirect_refusal(
+                "invalid_request", "PKCE with code_challenge_method=S256 is required",
+            )
+
+        user = await _user_from_session(session_cookie, db)
+        if user is None:
+            raise OAuthServerError("access_denied", "not signed in", status=401)
+        # The chosen team must be one this user actually belongs to — the field is client-supplied.
+        membership = (await db.execute(select(Membership).where(
+            Membership.user_id == user.id, Membership.org_id == org_id))).scalar_one_or_none()
+        if membership is None:
+            raise _redirect_refusal("access_denied", "choose a team you are a member of")
+
+        code = OAuthCode(
+            code=_secrets.token_urlsafe(32), client_id=client.client_id, user_id=user.id, org_id=org_id,
+            redirect_uri=redirect_uri, code_challenge=code_challenge,
+            resource=mcp_oauth.normalize_resource(resource) if resource else mcp_oauth.mcp_resource_url(),
+            scope=scope,
+            expires_at=datetime.now(timezone.utc).replace(tzinfo=None)
+            + timedelta(seconds=AUTH_CODE_TTL_S))
+        db.add(code)
+        await db.commit()
+        return code.code
+
+
+async def _refresh_grant(*, refresh_token: str, client_id: str, resource: str) -> dict:
+    """Exchange a refresh token for a new access token, ROTATING the refresh token as we go.
+
+    The retired row is kept, not deleted. That is what makes a replay recognisable: a deleted token
+    looks merely unknown, while a retired one tells us somebody used a credential that had already
+    been spent — and at that point the safe reading is that it was copied.
+    """
+    async with database.session_maker() as db:
+        if not refresh_token:
+            raise OAuthServerError("invalid_request", "refresh_token is required")
+        row = (await db.execute(select(OAuthRefresh).where(
+            OAuthRefresh.token_hash == crypto.hash_token(refresh_token)))).scalar_one_or_none()
+        if row is None:
+            raise OAuthServerError("invalid_grant", "unknown refresh token")
+
+        if row.retired_at is not None:
+            # Already spent. Either a client retried after a dropped response, or someone else has a
+            # copy — indistinguishable from here, so assume the worse one and end the whole family. The
+            # cost of being wrong is one sign-in; the cost of the other mistake is somebody's balance.
+            killed = await _revoke_refresh_family(row.family_id, "reuse detected", db)
+            await db.commit()
+            audit.record_call(org_id=row.org_id, user_email="", tool_name="oauth.refresh_reuse",
+                              method="POST", path="/oauth/token", status_code=400, client="",
+                              telemetry={"family": row.family_id, "revoked": killed})
+            raise OAuthServerError(
+                "invalid_grant",
+                "this refresh token was already used — the grant has been revoked, sign in again",
+            )
+
+        if not _refresh_is_live(row):
+            raise OAuthServerError("invalid_grant", "refresh token expired")
+        if client_id and client_id != row.client_id:
+            raise OAuthServerError("invalid_grant", "refresh token was issued to a different client")
+        if resource and not _same_mcp_resource(resource, row.resource):
+            raise OAuthServerError(
+                "invalid_target", "resource does not match the one that was consented to",
+            )
+
+        user = await db.get(User, row.user_id)
+        if user is None or user.suspended:
+            raise OAuthServerError(
+                "invalid_grant", "the account behind this grant is no longer active",
+            )
+        live_org_id = await _family_org(row.family_id, db) or row.org_id
+        org = await db.get(Org, live_org_id)
+        if org is None or org.suspended:
+            raise OAuthServerError(
+                "invalid_grant", "the team on this grant is no longer available",
+            )
+        # STILL a member? The grant is the user's consent to spend a TEAM's balance, and leaving (or
+        # being removed from) that team ends the standing they consented with. Without this a grant
+        # kept minting tokens forever: every downstream call was refused by `require_member`, so the
+        # damage was bounded, but the grant lay dormant and sprang back to life — with no new consent —
+        # the day the membership was restored.
+        still_in = (await db.execute(select(Membership).where(
+            Membership.user_id == row.user_id, Membership.org_id == live_org_id))).scalar_one_or_none()
+        if still_in is None:
+            await _revoke_refresh_family(row.family_id, "membership ended", db)
+            await db.commit()
+            raise OAuthServerError(
+                "invalid_grant",
+                "the account behind this grant is no longer a member of its team — sign in again",
+            )
+
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        row.retired_at, row.retired_reason = now, "rotated"
+        db.add(row)
+        replacement = await _issue_refresh(family_id=row.family_id, client_id=row.client_id,
+                                           user_id=row.user_id, org_id=live_org_id,
+                                           resource=row.resource, scope=row.scope, db=db)
+        access = mcp_oauth.make_access_token(
+            user_id=row.user_id, org_id=live_org_id, scope=row.scope,
+            audience=mcp_oauth.normalize_resource(row.resource),  # heal pre-normalization spellings
+            token_version=user.token_version)
+        await db.commit()
+        return {"access_token": access, "token_type": "Bearer",
+                "expires_in": mcp_oauth.ACCESS_TTL_SECONDS, "scope": row.scope,
+                "refresh_token": replacement}
+
+
+async def exchange_oauth_token(
+    *, grant_type: str, code: str, redirect_uri: str, client_id: str, code_verifier: str,
+    resource: str, refresh_token: str,
+) -> dict:
+    if grant_type == "refresh_token":
+        return await _refresh_grant(
+            refresh_token=refresh_token, client_id=client_id, resource=resource,
+        )
+    if grant_type != "authorization_code":
+        raise OAuthServerError(
+            "unsupported_grant_type", "supported grants: authorization_code, refresh_token",
+        )
+
+    async with database.session_maker() as db:
+        row = (await db.execute(select(OAuthCode).where(OAuthCode.code == code))
+               ).scalar_one_or_none() if code else None
+        if row is None:
+            raise OAuthServerError("invalid_grant", "unknown or already-redeemed code")
+
+        # DELETE FIRST. A code is single-use, and holding it while validating leaves a window where two
+        # redemptions both read it. Everything below is validated against values already in hand.
+        await db.delete(row)
+        await db.commit()
+
+        if row.expires_at < datetime.now(timezone.utc).replace(tzinfo=None):
+            raise OAuthServerError("invalid_grant", "code expired")
+        if client_id and client_id != row.client_id:
+            raise OAuthServerError("invalid_grant", "code was issued to a different client")
+        if redirect_uri != row.redirect_uri:
+            raise OAuthServerError(
+                "invalid_grant", "redirect_uri does not match the one the code was issued for",
+            )
+        if not mcp_oauth.verify_pkce(code_verifier, row.code_challenge):
+            raise OAuthServerError(
+                "invalid_grant", "code_verifier does not match the code_challenge",
+            )
+        if resource and not _same_mcp_resource(resource, row.resource):
+            raise OAuthServerError(
+                "invalid_target", "resource does not match the one that was consented to",
+            )
+
+        user = await db.get(User, row.user_id)
+        if user is None or user.suspended:
+            raise OAuthServerError(
+                "invalid_grant", "the account behind this grant is no longer active",
+            )
+
+        token = mcp_oauth.make_access_token(
+            user_id=row.user_id, org_id=row.org_id, scope=row.scope,
+            audience=mcp_oauth.normalize_resource(row.resource),  # heal pre-normalization spellings
+            token_version=user.token_version)
+        refresh = await _issue_refresh(family_id=_secrets.token_urlsafe(16), client_id=row.client_id,
+                                       user_id=row.user_id, org_id=row.org_id, resource=row.resource,
+                                       scope=row.scope, db=db)
+        await db.commit()
+        return {"access_token": token, "token_type": "Bearer",
+                "expires_in": mcp_oauth.ACCESS_TTL_SECONDS, "scope": row.scope,
+                "refresh_token": refresh}
+
+
+async def revoke_oauth_token(token: str) -> None:
+    async with database.session_maker() as db:
+        if token:
+            row = (await db.execute(select(OAuthRefresh).where(
+                OAuthRefresh.token_hash == crypto.hash_token(token)))).scalar_one_or_none()
+            if row is not None:
+                await _revoke_refresh_family(row.family_id, "revoked by client", db)
+                await db.commit()
+
+
+async def list_oauth_grants(user_id: int) -> list[dict]:
+    async with database.session_maker() as db:
+        rows = (await db.execute(select(OAuthRefresh).where(
+            OAuthRefresh.user_id == user_id, OAuthRefresh.retired_at.is_(None)
+        ).order_by(OAuthRefresh.created_at.desc()))).scalars().all()
+        rows = [row for row in rows if _refresh_is_live(row)]
+        seen: set[str] = set()
+        out: list[dict] = []
+        for row in rows:                      # one entry per GRANT, not per rotation of its token
+            if row.family_id in seen:
+                continue
+            seen.add(row.family_id)
+            # Listing and refresh must read the SAME family authority. A token row's org_id is immutable
+            # issue provenance and may legitimately name the team used before a later move.
+            grant = await _ensure_grant(row.family_id, db)
+            org_id = grant.current_org_id if grant is not None else None
+            org = await db.get(Org, org_id) if org_id is not None else None
+            client = (await db.execute(select(OAuthClient).where(
+                OAuthClient.client_id == row.client_id))).scalar_one_or_none()
+            out.append({
+                "grant": row.family_id,
+                "client": (client.client_name if client else "") or row.client_id,
+                "team": org.slug if org else None,
+                "team_name": org.name if org else None,
+                "granted": grant.granted_at.isoformat(timespec="seconds") if grant else None,
+            })
+        # GET normally reads only, but repairing a family created by an old rolling-deploy instance is
+        # a durable compatibility backfill. Without this commit the response looks healed once while
+        # the inserted authority row is rolled back when the request session closes.
+        await db.commit()
+        return out
+
+
+async def move_oauth_grant(*, user_id: int, family_id: str, team: str) -> dict:
+    async with database.session_maker() as db:
+        rows = (await db.execute(select(OAuthRefresh).where(
+            OAuthRefresh.family_id == family_id, OAuthRefresh.user_id == user_id,
+            OAuthRefresh.retired_at.is_(None)))).scalars().all()
+        rows = [row for row in rows if _refresh_is_live(row)]
+        if not rows:
+            raise OAuthGrantError(f"no live grant {family_id!r} on this account")
+        org = await _resolve_org(team, db)
+        member = (await db.execute(select(Membership).where(
+            Membership.user_id == user_id, Membership.org_id == org.id))).scalar_one_or_none() if org else None
+        # ONE answer for "no such team" and "a team that isn't yours". Told apart, this route reports
+        # whether an arbitrary slug exists on treg — a slug-existence oracle any signed-in account could
+        # walk. The caller's own teams are already listed to them by `treg org ls`, so the distinction
+        # buys them nothing they cannot see elsewhere.
+        if org is None or org.suspended or member is None:
+            raise OAuthGrantError(
+                f"no team {team!r} on this account — see `treg org ls` for the teams you can use",
+            )
+        # Change only family authority. Token rows are evidence of where each historical bearer was
+        # issued and must stay immutable, especially retired rows kept for reuse detection.
+        grant = await _ensure_grant(family_id, db)
+        if grant is None:  # the live-row check above makes this defensive, not a normal outcome
+            raise OAuthGrantError(f"no live grant {family_id!r} on this account")
+        grant.current_org_id = org.id
+        db.add(grant)
+        await db.commit()
+        return {
+            "grant": family_id, "team": org.slug, "team_name": org.name,
+            # Access tokens live an hour and carry the old team until the client refreshes. Saying so
+            # is the difference between "it didn't work" and "it hasn't taken effect yet".
+            "note": (f"new calls spend from {org.slug!r} once the client refreshes its access token "
+                     f"(within {mcp_oauth.ACCESS_TTL_SECONDS // 60} minutes)"),
+        }

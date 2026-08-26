@@ -41,7 +41,7 @@ Regenerate via `scripts/build-map.py`.
 | `src/treg/analytics.py` | architecture/data-model.md |
 | `src/treg/api.py` | architecture/money.md, architecture/multi-tenancy.md, architecture/proxy-model.md, architecture/super-admin.md, guides/expanding-a-category.md, interface/api.md, interface/dashboard.md, interface/landing-sandbox.md, interface/seo.md |
 | `src/treg/application/__init__.py` | architecture/import-boundaries.md |
-| `src/treg/application/auth.py` | architecture/multi-tenancy.md, interface/api.md, interface/onboarding.md |
+| `src/treg/application/auth.py` | architecture/mcp-oauth.md, architecture/multi-tenancy.md, interface/api.md, interface/onboarding.md |
 | `src/treg/application/signup.py` | architecture/multi-tenancy.md, interface/api.md |
 | `src/treg/audit.py` | architecture/data-model.md, ops/deploy.md |
 | `src/treg/billing.py` | architecture/money.md |
@@ -163,7 +163,7 @@ Regenerate via `scripts/build-map.py`.
 | `architecture/import-boundaries.md` | `pyproject.toml`, `ci.yml`, `__init__.py`, `__init__.py`, `__init__.py`, `test_import_lightness.py` |
 | `architecture/local-proxy.md` | `localproxy.py`, `server.js` |
 | `architecture/local-run.md` | `localrun.py`, `egress.py`, `fsjail.py` |
-| `architecture/mcp-oauth.md` | `mcp.py`, `mcp_oauth.py`, `health.py`, `mcp_oauth.py`, `session.py`, `auth.py`, `connect-demo.html` |
+| `architecture/mcp-oauth.md` | `auth.py`, `mcp.py`, `mcp_oauth.py`, `health.py`, `mcp_oauth.py`, `session.py`, `auth.py`, `connect-demo.html` |
 | `architecture/money.md` | `ledger.py`, `models.py`, `billing.py`, `reconcile.py`, `referrals.py`, `api.py`, `admin.py` |
 | `architecture/multi-tenancy.md` | `models.py`, `api.py`, `auth.py`, `signup.py`, `access.py`, `session.py`, `auth.py`, `db.py`, `test_router_dependencies.py` |
 | `architecture/proxy-model.md` | `proxy.py`, `api.py` |
