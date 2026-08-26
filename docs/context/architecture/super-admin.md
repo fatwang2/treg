@@ -26,12 +26,12 @@ A caller is a super-admin if EITHER:
 Otherwise 403. The env key bootstraps; `POST /admin/users/{id}/superadmin` then grants named users the
 flag (so a web portal can log in with either). Returns a principal string (for audit).
 
-`api.py` re-exports this dependency during the staged router migration, so the existing admin route
-definitions and compatibility imports still refer to the same function object.
+`api.py` re-exports this dependency during the staged router migration, so compatibility imports refer
+to the same function object.
 
-The cross-tenant GET and reconciliation handlers live in `routers.admin`; `api.py` appends its two
-router blocks around the unchanged admin mutation block to preserve registration order. The mutation
-handlers and their control helpers remain in `api.py` for the later control-layer extraction.
+The cross-tenant read, mutation, and reconciliation handlers live in three ordered blocks in
+`routers.admin`. The mutation block shares the org deletion and member-rule cleanup helpers from
+`routers.orgs`.
 
 ## Suspension enforcement (in `require_member`)
 Two flags gate the **org-scoped** path: `require_member` raises 403 if `user.suspended` ("account

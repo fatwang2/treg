@@ -35,8 +35,8 @@ related:
 
 Route definitions live on `api.router`; login, session, invite, OAuth-server, and grant-management blocks
 are defined in `routers.auth`; the open Catalog JSON block is defined in `routers.catalog`; the
-three presentation blocks are defined in `routers.web`, and the two cross-tenant admin read/report
-blocks are defined in `routers.admin`.
+three presentation blocks are defined in `routers.web`; and the cross-tenant admin read, mutation,
+and report blocks are defined in `routers.admin`.
 `api.py` attaches each block at its original registration point. `bootstrap.create_app()` assembles
 the combined route table into FastAPI roles.
 `api.app` remains the deployed, backward-compatible `all` role. Everything the CLI + skill do is one

@@ -94,13 +94,17 @@ from .models import (ROLE_RANK, AdConversion, Bundle, CallRecord, CapabilityPin,
 from .proxy import relay
 from .routers import admin as admin_routes
 from .routers.admin import (
+    BoolIn,
     _ERROR_EVIDENCE_EXPIRED,
     _ERROR_EVIDENCE_TTL_DAYS,
     _purge_expired_error_evidence,
+    _is_last_active_superadmin,
     _tally,
     admin_calls,
     admin_errors,
     admin_health,
+    admin_delete_org,
+    admin_delete_user,
     admin_org_detail,
     admin_orgs,
     admin_reconcile_drift,
@@ -108,6 +112,9 @@ from .routers.admin import (
     admin_reconcile_spend,
     admin_referrals,
     admin_stats,
+    admin_set_superadmin,
+    admin_suspend_org,
+    admin_suspend_user,
     admin_tools,
     admin_users,
 )
@@ -783,15 +790,6 @@ router.routes.extend(web_routes.public_docs_router.routes)
 router.routes.extend(auth_routes.token_router.routes)
 
 
-async def _is_last_active_superadmin(db: AsyncSession, target: User) -> bool:
-    """True if `target` is currently the ONLY active (unsuspended) super-admin, so demoting /
-    suspending / deleting them would leave the platform with no reachable admin."""
-    if not (target.is_superadmin and not target.suspended):
-        return False  # not an active super-admin → removing them changes nothing about the floor
-    actives = (
-        await db.execute(select(User).where(User.is_superadmin.is_(True), User.suspended.is_(False)))
-    ).scalars().all()
-    return len(actives) <= 1
 
 
 
@@ -3597,103 +3595,14 @@ async def get_health(
 
 
 # ---- super-admin: cross-tenant read + control (env token OR is_superadmin user) -----------
-class BoolIn(BaseModel):
-    value: bool = True
 
 
 # Register the moved admin read routes at their original position.
 router.routes.extend(admin_routes.reads_router.routes)
 
-@app.post("/admin/users/{user_id}/superadmin")
-async def admin_set_superadmin(
-    user_id: int, body: BoolIn, principal: str = Depends(require_superadmin), db: AsyncSession = Depends(get_session)
-) -> dict:
-    user = await db.get(User, user_id)
-    if user is None:
-        raise HTTPException(status_code=404, detail="user not found")
-    # Demoting the last active super-admin locks everyone out of /admin/* (the env token bypasses).
-    if not body.value and principal != "env-admin" and await _is_last_active_superadmin(db, user):
-        raise HTTPException(status_code=409, detail="cannot demote the last active super-admin")
-    user.is_superadmin = body.value
-    await db.commit()
-    return {"user_id": user_id, "is_superadmin": user.is_superadmin}
+router.routes.extend(admin_routes.mutations_router.routes)
 
 
-@app.post("/admin/users/{user_id}/suspend")
-async def admin_suspend_user(
-    user_id: int, body: BoolIn, principal: str = Depends(require_superadmin), db: AsyncSession = Depends(get_session)
-) -> dict:
-    user = await db.get(User, user_id)
-    if user is None:
-        raise HTTPException(status_code=404, detail="user not found")
-    if body.value and principal != "env-admin" and await _is_last_active_superadmin(db, user):
-        raise HTTPException(status_code=409, detail="cannot suspend the last active super-admin")
-    user.suspended = body.value
-    await db.commit()
-    return {"user_id": user_id, "suspended": user.suspended}
-
-
-@app.delete("/admin/users/{user_id}")
-async def admin_delete_user(
-    user_id: int, principal: str = Depends(require_superadmin), db: AsyncSession = Depends(get_session)
-) -> dict:
-    user = await db.get(User, user_id)
-    if user is None:
-        raise HTTPException(status_code=404, detail="user not found")
-    if principal != "env-admin" and await _is_last_active_superadmin(db, user):
-        raise HTTPException(status_code=409, detail="cannot delete the last active super-admin")
-    mem = (await db.execute(select(Membership).where(Membership.user_id == user_id))).scalars().all()
-    affected = {m.org_id for m in mem}
-    for m in mem:
-        await db.delete(m)
-    await db.flush()
-    emptied = []
-    for oid in affected:
-        survivors = (
-            await db.execute(select(Membership).where(Membership.org_id == oid).order_by(Membership.id))
-        ).scalars().all()
-        if not survivors:  # an org left with zero members is dead — cascade it away
-            org = await db.get(Org, oid)
-            if org is not None:
-                await _cascade_delete_org(org, db)
-                emptied.append(oid)
-        elif not any(m.role == "owner" for m in survivors):
-            # Deleting the sole owner would leave an ungovernable org (no one can pass _require_owner_of).
-            # Promote the earliest-joined survivor so ownership never evaporates.
-            survivors[0].role = "owner"
-    # The USER row is about to go, so member-scoped rules must go from EVERY org — `DenyRule.user_id`
-    # is a foreign key, and a surviving row would dangle (a hard error on Postgres).
-    await _drop_member_deny_rules(db, user_id)
-    await db.delete(user)
-    await db.commit()
-    return {"deleted_user": user_id, "deleted_empty_orgs": emptied}
-
-
-@app.post("/admin/orgs/{org_id}/suspend")
-async def admin_suspend_org(
-    org_id: int, body: BoolIn, _: str = Depends(require_superadmin), db: AsyncSession = Depends(get_session)
-) -> dict:
-    org = await db.get(Org, org_id)
-    if org is None:
-        raise HTTPException(status_code=404, detail="org not found")
-    org.suspended = body.value
-    await db.commit()
-    return {"org_id": org_id, "suspended": org.suspended}
-
-
-@app.delete("/admin/orgs/{org_id}")
-async def admin_delete_org(
-    org_id: int, _: str = Depends(require_superadmin), db: AsyncSession = Depends(get_session)
-) -> dict:
-    org = await db.get(Org, org_id)
-    if org is None:
-        raise HTTPException(status_code=404, detail="org not found")
-    await _cascade_delete_org(org, db)
-    await db.commit()
-    return {"deleted_org": org_id}
-
-
-# Register the moved admin report routes after the unchanged mutation block.
 router.routes.extend(admin_routes.reports_router.routes)
 
 # ---- the proxy: call a tool without holding its credential --------------------------------
