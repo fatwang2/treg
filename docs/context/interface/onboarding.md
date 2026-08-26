@@ -4,6 +4,7 @@ status: shipped
 sources:
   - src/treg/demo.py
   - src/treg/cli.py
+  - src/treg/routers/auth.py
   - src/treg/web/index.html
 related:
   - interface/api.md

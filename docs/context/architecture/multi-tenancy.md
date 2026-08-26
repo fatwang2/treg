@@ -6,6 +6,7 @@ sources:
   - src/treg/api.py
   - src/treg/domain/identity/access.py
   - src/treg/domain/identity/session.py
+  - src/treg/routers/auth.py
   - src/treg/db.py
   - tests/test_router_dependencies.py
 related:
