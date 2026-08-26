@@ -383,13 +383,13 @@ callbacks pop `_cli_states` only after that commit. The session-identity block t
   either way → `/?invite_expired=1`. `auth_me`
   (`GET /auth/me`) answers for a **token**
   (`X-Treg-Token`) as well as a session cookie, so the dashboard's token door can learn its own email.
-  `auth_cli_token` (`GET /auth/cli-token`, `require_identity`) mints a fresh **identity token** for the
-  caller (session OR token); the dashboard embeds it in copy-paste snippets + a "copy token" button (pair
-  with `X-Treg-Org` to pick the org). Signed session cookies + identity tokens carry a **`tv`
+  `auth_cli_token` (`GET /auth/cli-token`, `require_identity`) delegates token minting and optional team
+  pinning to `application.auth.issue_cli_token`; the dashboard embeds the fresh **identity token** in
+  copy-paste snippets and its "copy token" button. Signed sessions and identity tokens carry a **`tv`
   (token_version)** claim bound to the user row (`sess.make`/`read_claims`, checked in `_user_from_session`
   / `_user_from_identity_token`); `auth_revoke_tokens` (`POST /auth/revoke-tokens`, `require_identity`)
-  bumps `User.token_version`, invalidating every token that user holds at once — the kill switch for a
-  leaked token that (unlike suspension) keeps the account and (unlike rotating `TREG_SESSION_SECRET`)
+  delegates to `application.auth.revoke_identity_tokens`, which bumps `User.token_version` and invalidates
+  every token that user holds at once; this kill switch keeps the account active and
   affects only that user; it re-issues a fresh cookie + token so the caller stays signed in. A token with
   no `tv` (minted before this shipped) reads as `tv=0`, so a plain deploy revokes nobody.
   Plus `auth_me` (returns `onboarded`), `auth_logout`, and **onboarding** — `POST /onboard/demo|skip|reset`

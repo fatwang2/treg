@@ -152,6 +152,13 @@ class SocialLoginProof:
 
 
 @dataclass(frozen=True)
+class RevokedIdentityTokens:
+    token: str
+    email: str
+    session_cookie: str
+
+
+@dataclass(frozen=True)
 class CurrentIdentity:
     email: str
     is_superadmin: bool
@@ -351,6 +358,41 @@ async def cli_session_email(session_cookie: str) -> str | None:
     async with database.session_maker() as db:
         user = await _user_from_session(session_cookie, db)
         return user.email if user else None
+
+
+async def issue_cli_token(
+    *, user_id: int, email: str, token_version: int, org_ref: str,
+) -> dict:
+    async with database.session_maker() as db:
+        org_slug = None
+        if org_ref:
+            org = await _resolve_org(org_ref, db)
+            if org is not None:
+                membership = (await db.execute(select(Membership).where(
+                    Membership.user_id == user_id,
+                    Membership.org_id == org.id,
+                ))).scalar_one_or_none()
+                if membership is not None:
+                    org_slug = org.slug
+        return {
+            "token": sess.make(user_id, CLI_TOKEN_TTL, token_version, org=org_slug),
+            "email": email,
+            "org": org_slug,
+        }
+
+
+async def revoke_identity_tokens(user_id: int) -> RevokedIdentityTokens:
+    async with database.session_maker() as db:
+        user = await db.get(User, user_id)
+        if user is None:
+            raise IdentityLookupError
+        user.token_version += 1
+        await db.commit()
+        return RevokedIdentityTokens(
+            token=sess.make(user.id, CLI_TOKEN_TTL, user.token_version),
+            email=user.email,
+            session_cookie=sess.make(user.id, token_version=user.token_version),
+        )
 
 
 def start_github_login(cli: str, callback_base: Callable[[], str]) -> SocialLoginStart:

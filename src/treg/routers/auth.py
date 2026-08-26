@@ -10,7 +10,6 @@ from fastapi import APIRouter, Cookie, Depends, Form, Header, HTTPException, Que
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
 
 from ..application import auth as auth_use_cases
 from ..application import signup
@@ -27,12 +26,11 @@ from ..application.auth import (
     OTP_START_WINDOW_S,
 )
 from ..config import PUBLIC_HOST_ALIASES, get_settings
-from ..db import get_session
 from ..domain.identity import mcp_oauth
 from ..domain.identity import session as sess
-from ..domain.identity.access import _resolve_org, require_identity
+from ..domain.identity.access import require_identity
 from ..domain.identity.mcp_oauth import REFRESH_TTL_S
-from ..models import Membership, User
+from ..models import User
 from .auth_helpers import _is_https, _remember_oauth_return, _same_origin
 from .web import _esc_html
 
@@ -1077,7 +1075,6 @@ token_router = app
 async def auth_cli_token(
     user: User = Depends(require_identity),
     x_treg_org: str = Header(default=""),
-    db: AsyncSession = Depends(get_session),
 ) -> dict:
     """Mint a fresh CLI/bearer token for the authenticated caller (session cookie OR token). Identity
     tokens are stateless (`sess.make`), so handing one out rotates/invalidates nothing — it just lets
@@ -1089,23 +1086,18 @@ async def auth_cli_token(
     "your API key" work as a bare bearer where no `X-Treg-Org` header can travel — pasted into an MCP
     server's Authorization it resolves to that team, no header, no per-org agent token to manage. A
     caller in one team who sends no header still gets a plain token (MCP auto-selects the sole team)."""
-    org_slug = None
-    if x_treg_org:
-        org = await _resolve_org(x_treg_org, db)
-        if org is not None:
-            m = (await db.execute(select(Membership).where(
-                Membership.user_id == user.id, Membership.org_id == org.id))).scalar_one_or_none()
-            if m is not None:               # only pin a team the caller actually belongs to
-                org_slug = org.slug
-    return {"token": sess.make(user.id, CLI_TOKEN_TTL, user.token_version, org=org_slug),
-            "email": user.email, "org": org_slug}
+    return await auth_use_cases.issue_cli_token(
+        user_id=user.id,
+        email=user.email,
+        token_version=user.token_version,
+        org_ref=x_treg_org,
+    )
 
 
 @app.post("/auth/revoke-tokens")
 async def auth_revoke_tokens(
     request: Request,
     user: User = Depends(require_identity),
-    db: AsyncSession = Depends(get_session),
 ) -> JSONResponse:
     """Kill switch for a leaked token: invalidate every signed identity token (from `treg login`) AND
     every browser session this user holds, in one step. Bumping user.token_version makes all previously
@@ -1114,10 +1106,8 @@ async def auth_revoke_tokens(
     a fresh session cookie + token for the caller, so the device that pressed the button stays signed in
     while every other device is signed out. (Org membership tokens from accept-invite are a separate token
     type and are unaffected — those are revoked by removing the membership.)"""
-    user.token_version += 1  # same db session as require_identity (FastAPI caches the dependency)
-    await db.commit()
-    resp = JSONResponse({"token": sess.make(user.id, CLI_TOKEN_TTL, user.token_version),
-                         "email": user.email, "revoked": True})
-    resp.set_cookie(sess.COOKIE, sess.make(user.id, token_version=user.token_version), httponly=True,
+    revoked = await auth_use_cases.revoke_identity_tokens(user.id)
+    resp = JSONResponse({"token": revoked.token, "email": revoked.email, "revoked": True})
+    resp.set_cookie(sess.COOKIE, revoked.session_cookie, httponly=True,
                     samesite="lax", secure=_is_https(request), max_age=sess.TTL_SECONDS)
     return resp
