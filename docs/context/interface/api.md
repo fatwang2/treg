@@ -4,6 +4,7 @@ status: shipped
 sources:
   - src/treg/web/sitetrack.js
   - src/treg/api.py
+  - src/treg/caller_metadata.py
   - src/treg/application/auth.py
   - src/treg/application/signup.py
   - src/treg/routers/__init__.py
@@ -109,7 +110,7 @@ pages. `application.auth` builds each authorization request, exchanges the provi
 the proven email, provisions the user, and commits before returning a framework-neutral proof. Its
 callbacks pop `_cli_states` only after that commit. The session-identity block translates
 `application.auth.current_identity` for `/auth/me`; `/auth/logout` remains an HTTP-only cookie action.
-`routers.orgs` translates signup, team-entry, invite-lifecycle, and member-management HTTP. `application.signup` owns the two creation
+`routers.orgs` translates signup, team-entry, invite-lifecycle, member-management, and machine-identity HTTP. `application.signup` owns the two creation
 transactions and their promo, conversion, and referral sequence; `domain.governance.teams` owns team
 slug and membership creation plus the team-switcher read model.
 

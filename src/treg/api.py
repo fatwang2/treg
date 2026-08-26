@@ -54,6 +54,7 @@ from . import adsconv, agent_pages, analytics, audit, billing, catalog_store, cr
 from . import oauth_providers
 from . import pubfeed, ratestore, reconcile, referrals, runner, sandbox as demo_sandbox
 from .config import LEGACY_PUBLIC_HOSTS, PUBLIC_HOST_ALIASES, get_settings, platform_setting_name
+from .caller_metadata import _client_of, _norm_client
 from .db import get_session, session_maker
 from .domain.identity import session as sess
 from .domain.identity.access import (
@@ -201,6 +202,7 @@ from .routers.orgs import (
     INVITE_TTL_DAYS,
     AcceptIn,
     AccessIn,
+    AgentIn,
     CapIn,
     InviteIn,
     OrgIn,
@@ -216,23 +218,33 @@ from .routers.orgs import (
     _known_tool_names,
     _normalize_project_access,
     _normalize_tool_access,
+    _agent_email,
+    _agent_name,
+    _public_demo_email,
     _require_admin_of,
     _require_owner_of,
     _used_today_by_user,
     accept_invite,
     accept_my_invite,
+    agent_checkin,
+    create_agent,
     create_invite,
     create_org,
+    create_public_token,
     count_today,
     delete_org,
+    delete_public_token,
     leave_org,
     list_invites,
+    list_agents,
     list_members,
+    list_observed_agents,
     list_orgs,
     my_usage,
     my_invites,
     register_user,
     remove_member,
+    revoke_agent,
     revoke_invite,
     set_member_access,
     set_member_cap,
@@ -1872,309 +1884,10 @@ async def billing_stripe_webhook(request: Request, db: AsyncSession = Depends(ge
 router.routes.extend(org_routes.member_management_router.routes)
 
 
-# ---- machine identities: the publishable demo token, and agents ----------------------------
-# Both are Users on an UNROUTABLE domain, which is what makes them machines rather than people: no
-# login door can ever resolve one (guarded in `_find_or_create_user`) and neither may act as a USER
-# (guarded in `require_identity`). Everything else they inherit from Membership for free.
-# NOTE: "agent" here is an IDENTITY — a coding agent / automation that calls treg. It is NOT the
-# skill-directory table in `agents.py` (which answers "where does each coding agent keep its skills").
-# The words collide, the concepts don't; kept apart deliberately.
-
-
-def _public_demo_email(org: Org) -> str:
-    return f"pub-{org.slug}@{PUBLIC_DEMO_DOMAIN}"
-
-
-def _agent_email(org: Org, name: str) -> str:
-    """Org-SCOPED on purpose: two orgs must each be able to own an agent called `deploy` without
-    sharing one User row (`User.email` is unique). Sharing would mean a superadmin suspending or
-    deleting one tenant's agent silently killed the other tenant's too."""
-    return f"agent-{org.slug}-{_slugify(name)}@{AGENT_DOMAIN}"
-
-
-def _agent_name(org: Org, email: str) -> str:
-    """The friendly name back out of the address (the name isn't stored — the address IS the id)."""
-    local = email.split("@", 1)[0]
-    prefix = f"agent-{org.slug}-"
-    return local[len(prefix):] if local.startswith(prefix) else local
-
-
-# list_members needs the machine-name helper until Commit 11 moves that journey into routers.orgs.
-org_routes._agent_name = _agent_name
-
-
-@app.post("/orgs/{org_id}/public-token")
-async def create_public_token(
-    org_id: int, caller: Caller = Depends(require_member), db: AsyncSession = Depends(get_session)
-) -> dict:
-    """Mint (or ROTATE) the org's publishable token: flips the org to `public_demo` and returns a
-    viewer-role token bound to a dedicated can't-log-in identity. Safe to print on a web page:
-    the lockdown in require_member/require_identity limits it to /call + reads, /call is per-IP
-    rate-limited, and calling this endpoint again replaces the token (instant revocation of the
-    old one). Owner-only — publishing a credential is an org-level decision."""
-    _require_owner_of(org_id, caller)
-    org = caller.org
-    email = _public_demo_email(org)
-    user = (await db.execute(select(User).where(User.email == email))).scalar_one_or_none()
-    if user is None:
-        user = User(email=email, demo=True)  # demo: excluded from stats; the domain can't receive mail
-        db.add(user)
-        await db.flush()
-    token = crypto.new_token()
-    membership = (await db.execute(select(Membership).where(
-        Membership.user_id == user.id, Membership.org_id == org_id))).scalar_one_or_none()
-    if membership is None:
-        db.add(Membership(user_id=user.id, org_id=org_id, role="viewer", token_hash=crypto.hash_token(token)))
-    else:
-        membership.token_hash = crypto.hash_token(token)  # rotate: the previous published token dies here
-    org.public_demo = True
-    await db.commit()
-    return {"token": token, "org": org.slug, "role": "viewer", "email": email,
-            "rate_limit": f"{PUBLIC_DEMO_RATE_MAX} calls per {PUBLIC_DEMO_RATE_WINDOW_S}s per IP",
-            "note": "this token can only call this org's tools and read — safe to publish; POST again to rotate"}
-
-
-@app.delete("/orgs/{org_id}/public-token")
-async def delete_public_token(
-    org_id: int, caller: Caller = Depends(require_member), db: AsyncSession = Depends(get_session)
-) -> dict:
-    """Revoke the publishable token and lift the org's public_demo lockdown."""
-    _require_owner_of(org_id, caller)
-    org = caller.org
-    user = (await db.execute(select(User).where(User.email == _public_demo_email(org)))).scalar_one_or_none()
-    if user is not None:
-        membership = (await db.execute(select(Membership).where(
-            Membership.user_id == user.id, Membership.org_id == org_id))).scalar_one_or_none()
-        if membership is not None:
-            await db.delete(membership)
-    org.public_demo = False
-    await db.commit()
-    return {"public_token_revoked": True, "org": org.slug}
-
-
-# ---- agents: a member identity for a machine caller ----------------------------------------
-# An agent is JUST a Membership whose user lives on AGENT_DOMAIN, which is why this needs no new
-# table and no migration: it inherits every per-member control already in place — `daily_call_cap`
-# (enforced by `_enforce_daily_cap`), `tool_access` (`_require_tool_access`, on the proxy AND both run
-# tiers), `local_run_enabled`, and per-identity audit, since `CallRecord.user_email` already stamps
-# every call. Giving the agent its own identity is what makes all of that per-agent.
-class AgentIn(BaseModel):
-    name: str
-    role: str = "member"  # never "owner" (see below); "admin" is owner-granted only
-    daily_call_cap: int = -1  # -1 = unlimited, mirroring set_member_cap
-    tool_access: list[str] | None = None  # None = every tool, mirroring set_member_access
-    project_access: list | None = None  # None = every project; slugs or ids, mirroring set_member_access
-    local_run_enabled: bool = True
-    # Set by the dashboard's "Scope this agent" promotion: the observed (member, runtime) pair this
-    # agent replaces, so the detected roster can drop it while the agent lives.
-    promoted_member: str | None = None
-    promoted_client: str | None = None
-    # Pin this token to one tag value — {"customer": "cust_A"} — for a token that will run on
-    # that customer's own machine. The pin then WINS over whatever header the holder sends.
-    pinned_tags: dict | None = None
-
-
-@app.post("/orgs/{org_id}/agents")
-async def create_agent(
-    org_id: int, body: AgentIn,
-    caller: Caller = Depends(require_member), db: AsyncSession = Depends(get_session),
-) -> dict:
-    """Mint (or ROTATE) an agent token: a member identity for a machine caller, with its own cap, tool
-    ACL and audit trail. Re-POSTing the same name rotates the token — the previous one dies here, the
-    same instant-revocation idiom as the public token. Admin+; only an owner may mint an admin agent.
-
-    On a ROTATE, a field the caller did not send is LEFT AS IT IS — a rotate replaces the token, never
-    the agent's limits. Reading an absent field as its default would silently widen a scoped agent to
-    every tool (`tool_access=None`), to unlimited calls (`daily_call_cap=-1`) and back to local runs
-    (`local_run_enabled=True`) — the dashboard's Rotate button sends only {name, role, cap}, so this
-    would fire on the ordinary path. Same shape `set_member_access` already uses for `project_access`."""
-    _require_admin_of(org_id, caller)
-    name = (body.name or "").strip()
-    if not name or not _slugify(name):
-        raise HTTPException(status_code=422, detail="name is required")
-    if body.role not in ROLE_RANK:
-        raise HTTPException(status_code=422, detail=f"role must be one of {sorted(ROLE_RANK)}")
-    if body.role == "owner":
-        raise HTTPException(status_code=422, detail="an agent cannot be an owner")
-    if body.role == "admin" and caller.role != "owner":
-        raise HTTPException(status_code=403, detail="only an owner can create an admin agent")
-    if body.daily_call_cap < -1:
-        raise HTTPException(status_code=422, detail="daily_call_cap must be -1 (unlimited) or >= 0")
-
-    email = _agent_email(caller.org, name)
-    user = (await db.execute(select(User).where(User.email == email))).scalar_one_or_none()
-    if user is None:
-        user = User(email=email)  # NOT demo=True: unlike the public token, agent traffic counts in usage
-        db.add(user)
-        await db.flush()
-    token = crypto.new_token()
-    membership = (await db.execute(select(Membership).where(
-        Membership.user_id == user.id, Membership.org_id == org_id))).scalar_one_or_none()
-    # A brand-new agent takes the defaults; a rotate keeps whatever it already had unless told otherwise.
-    is_new = membership is None
-    sent = body.model_fields_set
-
-    def _keep(field: str, current):
-        return getattr(body, field) if (is_new or field in sent) else current
-
-    if is_new:
-        membership = Membership(user_id=user.id, org_id=org_id, role=body.role,
-                                token_hash=crypto.hash_token(token), created_by=caller.email)
-        db.add(membership)
-    else:
-        membership.token_hash = crypto.hash_token(token)  # rotate: the previous token dies here
-        membership.role = _keep("role", membership.role)
-    membership.daily_call_cap = _keep("daily_call_cap", membership.daily_call_cap)
-    if is_new or "tool_access" in sent:  # only re-validate what the caller actually sent
-        membership.tool_access = _normalize_tool_access(
-            body.tool_access, await _known_access_names(org_id, db))
-    if is_new or "project_access" in sent:
-        membership.project_access = await _normalize_project_access(body.project_access, org_id, db)
-    if is_new or "promoted_member" in sent or "promoted_client" in sent:
-        member = _norm_email(body.promoted_member or "")
-        client = _norm_client(body.promoted_client or "")
-        membership.promoted_from = f"{member}|{client}" if member and client else ""
-    membership.local_run_enabled = _keep("local_run_enabled", membership.local_run_enabled)
-    pins = _keep("pinned_tags", membership.pinned_tags)
-    if pins:
-        if len(pins) > _META_MAX_KEYS:
-            raise HTTPException(status_code=422, detail=(
-                f"a token may be pinned to at most {_META_MAX_KEYS} tags"))
-        # Same validation the header path applies. A pin is written straight into the tag bag by
-        # `_parse_call_meta`, so an unvalidated one would reach the idempotency scope and the money
-        # rows without ever passing the parser.
-        pins = dict(_validate_tag_pair(k, v) for k, v in pins.items())
-    membership.pinned_tags = pins or None
-    await db.commit()
-    return {"token": token, "name": name, "email": email, "org": caller.org.slug, "user_id": user.id,
-            "role": membership.role, "daily_call_cap": membership.daily_call_cap,
-            "tool_access": membership.tool_access, "project_access": membership.project_access,
-            "local_run_enabled": membership.local_run_enabled,
-            "pinned_tags": membership.pinned_tags,
-            "note": "save this token now — it is shown once; POST the same name again to rotate it"}
-
-
-@app.get("/orgs/{org_id}/agents")
-async def list_agents(
-    org_id: int, caller: Caller = Depends(require_member), db: AsyncSession = Depends(get_session)
-) -> list[dict]:
-    """Every agent identity in the org, with its limits and today's usage. Never the token."""
-    _require_admin_of(org_id, caller)
-    memberships = (await db.execute(select(Membership).where(Membership.org_id == org_id))).scalars().all()
-    users = {u.id: u for u in (await db.execute(
-        select(User).where(User.id.in_([m.user_id for m in memberships]))
-    )).scalars().all()}
-    used = await _used_today_by_user(db, org_id)
-    agent_emails = [u.email for u in users.values() if _is_agent_email(u.email)]
-    # "connected" = the agent has EVER called in as itself (checkin or any real call) — what the
-    # token card polls to flip to ✓ the moment the setup instruction's final step runs.
-    seen = set((await db.execute(
-        select(CallRecord.user_email).where(
-            CallRecord.org_id == org_id, CallRecord.user_email.in_(agent_emails)).distinct()
-    )).scalars().all()) if agent_emails else set()
-    out: list[dict] = []
-    for m in memberships:
-        user = users.get(m.user_id)
-        if user is None or not _is_agent_email(user.email):
-            continue
-        out.append({"user_id": user.id, "name": _agent_name(caller.org, user.email),
-                    "email": user.email, "role": m.role, "daily_call_cap": m.daily_call_cap,
-                    "used_today": used.get(user.email, 0), "tool_access": m.tool_access,
-                    "project_access": m.project_access,  # the dashboard renders this column
-                    "local_run_enabled": m.local_run_enabled, "pinned_tags": m.pinned_tags,
-                    "created_at": m.created_at,
-                    "created_by": m.created_by, "promoted_from": m.promoted_from,
-                    "connected": user.email in seen})
-    return out
-
-
-@app.post("/agents/checkin")
-async def agent_checkin(
-    request: Request,
-    caller: Caller = Depends(require_member), db: AsyncSession = Depends(get_session),
-) -> dict:
-    """The handshake at the end of the setup instruction: the agent calls in AS ITSELF, proving the
-    token landed in the right environment. Audited synchronously (not fire-and-forget) so the
-    dashboard's poll sees `connected` flip the moment this returns. Works for any member token —
-    for a human it is just a no-op ping."""
-    rec = CallRecord(org_id=caller.org_id, user_email=caller.email, tool_name="—",
-                     method="CHECKIN", path="agent connected", status_code=200, kind="checkin",
-                     client=_client_of(request))
-    db.add(rec)
-    await db.commit()
-    return {"connected": True, "you": caller.email, "org": caller.org.slug}
-
-
-@app.get("/orgs/{org_id}/agents/observed")
-async def list_observed_agents(
-    org_id: int, caller: Caller = Depends(require_member), db: AsyncSession = Depends(get_session)
-) -> list[dict]:
-    """The agents ALREADY running under members' own tokens, discovered from traffic: one row per
-    (member, runtime) seen in the last 30 days, e.g. "sam@… / claude-code". The zero-setup half
-    of the agents story — nobody mints anything, the roster fills itself from `CallRecord.client`
-    (and RunRecord). Self-reported attribution, not authentication, which is why this view only
-    informs; scoping one for real = mint it a token ("Scope this agent" in the dashboard).
-
-    Machine identities are excluded — their calls are already attributed to themselves. So is a
-    plain terminal (`client` in ('', 'cli')): a roster that lists every human twice teaches nothing.
-    """
-    _require_admin_of(org_id, caller)
-    now = _utcnow_naive()
-    since = now - timedelta(days=30)
-    today = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    # A pair that was PROMOTED — it has its own agent identity now — leaves the detected roster;
-    # revoking that agent deletes its membership, which resurfaces the pair automatically.
-    promoted = {tuple(m.promoted_from.split("|", 1)) for m in (await db.execute(
-        select(Membership).where(Membership.org_id == org_id,
-                                 Membership.promoted_from != ""))).scalars().all()}
-    rows: dict[tuple[str, str], dict] = {}
-    for model, email_col, when_col, client_col in (
-        (CallRecord, CallRecord.user_email, CallRecord.created_at, CallRecord.client),
-        (RunRecord, RunRecord.user_email, RunRecord.created_at, RunRecord.client),
-    ):
-        # One grouped pass per table: the 30-day totals plus today's slice as a conditional sum,
-        # so a second identical GROUP BY isn't needed just to get `used_today`.
-        q = (select(email_col, client_col, func.count(), func.max(when_col),
-                    func.sum(case((when_col >= today, 1), else_=0)))
-             .where(model.org_id == org_id, when_col >= since,
-                    client_col.not_in(("", "cli")))
-             .group_by(email_col, client_col))
-        for email, client, count, last_seen, today_count in (await db.execute(q)).all():
-            if _is_machine_email(email) or (email, client) in promoted:
-                continue
-            cur = rows.setdefault((email, client), {"member": email, "client": client,
-                                                    "calls_30d": 0, "used_today": 0,
-                                                    "last_seen": last_seen})
-            cur["calls_30d"] += count
-            cur["used_today"] += today_count
-            cur["last_seen"] = max(cur["last_seen"], last_seen)
-    return sorted(rows.values(), key=lambda r: (r["member"], r["client"]))
-
-
-@app.delete("/orgs/{org_id}/agents/{user_id}")
-async def revoke_agent(
-    org_id: int, user_id: int,
-    caller: Caller = Depends(require_member), db: AsyncSession = Depends(get_session),
-) -> dict:
-    """Revoke an agent: delete its membership, which kills its token immediately."""
-    _require_admin_of(org_id, caller)
-    user = await db.get(User, user_id)
-    if user is None or not _is_agent_email(user.email):
-        raise HTTPException(status_code=404, detail="unknown agent")
-    membership = (await db.execute(select(Membership).where(
-        Membership.user_id == user_id, Membership.org_id == org_id))).scalar_one_or_none()
-    if membership is None:
-        raise HTTPException(status_code=404, detail="unknown agent")
-    email = user.email  # read before the delete — the row is expired after commit
-    await db.delete(membership)
-    await _drop_member_deny_rules(db, user_id, org_id)  # a rule aimed at a caller that no longer exists
-    await db.flush()
-    # The identity is org-scoped, so once its last membership is gone the User row has no purpose.
-    if (await db.execute(select(Membership).where(
-            Membership.user_id == user_id))).scalars().first() is None:
-        await db.delete(user)
-    await db.commit()
-    return {"revoked": True, "email": email}
+# The public-token response reports the same limiter values enforced by _enforce_public_demo_rate.
+org_routes.PUBLIC_DEMO_RATE_MAX = PUBLIC_DEMO_RATE_MAX
+org_routes.PUBLIC_DEMO_RATE_WINDOW_S = PUBLIC_DEMO_RATE_WINDOW_S
+router.routes.extend(org_routes.machine_identity_router.routes)
 
 
 # ---- projects: an optional sub-scope inside an org ------------------------------------------
@@ -2861,18 +2574,8 @@ def _redact_argv(argv: list[str]) -> str:
     return " ".join(_redact_argv_list(argv))[:500]
 
 
-def _norm_client(raw: str) -> str:
-    """A runtime name as a short slug. One spelling for both ends of the roster: what an incoming
-    header is stored as, and what `promoted_from` must match to hide a detected pair."""
-    return re.sub(r"[^a-z0-9-]", "",
-                  raw.strip().lower().split("/", 1)[0])[:32]  # "claude-code/1.2" → "claude-code"
 
 
-def _client_of(request: Request | None) -> str:
-    """The calling RUNTIME from X-Treg-Client — attribution, not authentication (anything holding
-    the token can claim any name, so this informs the roster and never gates anything). An
-    unknown-but-well-formed name is kept, so a new runtime shows up without a release."""
-    return _norm_client(request.headers.get("X-Treg-Client", "") if request is not None else "")
 
 
 async def _grant_audit(db: AsyncSession, caller: Caller, tool_name: str, method: str, path: str,
@@ -5293,6 +4996,11 @@ def _validate_tag_pair(key: str, value: str, *, where: str = "tag") -> tuple[str
             f"{where} value for {key!r} may only contain letters, digits and . _ - : "
             f"(these ids are used as storage keys)"))
     return key, value
+
+
+# Agent pins share the call-header storage-key rules until Stage 4 extracts caller metadata ownership.
+org_routes._META_MAX_KEYS = _META_MAX_KEYS
+org_routes._validate_tag_pair = _validate_tag_pair
 
 
 def _parse_call_meta(request: Request, caller: Caller | None = None) -> CallMeta:

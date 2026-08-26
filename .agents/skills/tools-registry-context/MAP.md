@@ -46,6 +46,7 @@ Regenerate via `scripts/build-map.py`.
 | `src/treg/audit.py` | architecture/data-model.md, ops/deploy.md |
 | `src/treg/billing.py` | architecture/money.md |
 | `src/treg/bootstrap.py` | architecture/composition.md |
+| `src/treg/caller_metadata.py` | architecture/multi-tenancy.md, interface/api.md |
 | `src/treg/catalog/aliases.yaml` | architecture/catalog.md |
 | `src/treg/catalog/aviato.yaml` | architecture/catalog.md |
 | `src/treg/catalog/capabilities.yaml` | interface/catalog-review-proposal.md |
@@ -168,12 +169,12 @@ Regenerate via `scripts/build-map.py`.
 | `architecture/local-run.md` | `localrun.py`, `egress.py`, `fsjail.py` |
 | `architecture/mcp-oauth.md` | `auth.py`, `mcp.py`, `mcp_oauth.py`, `health.py`, `mcp_oauth.py`, `session.py`, `auth.py`, `connect-demo.html` |
 | `architecture/money.md` | `ledger.py`, `models.py`, `billing.py`, `reconcile.py`, `referrals.py`, `api.py`, `signup.py`, `admin.py` |
-| `architecture/multi-tenancy.md` | `models.py`, `api.py`, `auth.py`, `signup.py`, `teams.py`, `access.py`, `session.py`, `auth.py`, `orgs.py`, `db.py`, `test_router_dependencies.py` |
+| `architecture/multi-tenancy.md` | `models.py`, `api.py`, `caller_metadata.py`, `auth.py`, `signup.py`, `teams.py`, `access.py`, `session.py`, `auth.py`, `orgs.py`, `db.py`, `test_router_dependencies.py` |
 | `architecture/proxy-model.md` | `proxy.py`, `api.py` |
 | `architecture/super-admin.md` | `api.py`, `admin.py`, `access.py`, `config.py` |
 | `foundation/charter.md` | `2026-06-30-jason-tools-registry.md`, `README.md` |
 | `guides/expanding-a-category.md` | `oauth_providers.py`, `api.py`, `config.py` |
-| `interface/api.md` | `sitetrack.js`, `api.py`, `auth.py`, `signup.py`, `__init__.py`, `admin.py`, `auth.py`, `auth_helpers.py`, `catalog.py`, `orgs.py`, `signup_cookies.py`, `web.py`, `access.py`, `teams.py`, `mcp_oauth.py`, `session.py`, `timeutil.py`, `catalog_store.py`, `email.py`, `runner.py`, `ratestore.py` |
+| `interface/api.md` | `sitetrack.js`, `api.py`, `caller_metadata.py`, `auth.py`, `signup.py`, `__init__.py`, `admin.py`, `auth.py`, `auth_helpers.py`, `catalog.py`, `orgs.py`, `signup_cookies.py`, `web.py`, `access.py`, `teams.py`, `mcp_oauth.py`, `session.py`, `timeutil.py`, `catalog_store.py`, `email.py`, `runner.py`, `ratestore.py` |
 | `interface/catalog-review-proposal.md` | `catalog_store.py`, `capabilities.yaml` |
 | `interface/cli.md` | `cli.py`, `convert.py`, `agents.py` |
 | `interface/dashboard.md` | `sitetrack.js`, `index.html`, `README.md`, `vue-3.5.41.global.prod.js`, `tutorial.js`, `tutorial.html`, `tour.js`, `index.html`, `api.py`, `web.py`, `session.py`, `session.py` |
