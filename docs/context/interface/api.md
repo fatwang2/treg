@@ -112,8 +112,8 @@ the proven email, provisions the user, and commits before returning a framework-
 callbacks pop `_cli_states` only after that commit. The session-identity block translates
 `application.auth.current_identity` for `/auth/me`; `/auth/logout` remains an HTTP-only cookie action.
 `routers.orgs` translates signup, team-entry, invite-lifecycle, member-management, machine-identity,
-project, policy, settings, usage, and budget HTTP; `routers.resources` translates secret and tool CRUD
-HTTP. `application.signup` owns the two creation
+project, policy, settings, usage, and budget HTTP; `routers.resources` translates secret, tool, skill,
+and bundle HTTP. `application.signup` owns the two creation
 transactions and their promo, conversion, and referral sequence; `domain.governance.teams` owns team
 slug and membership creation plus the team-switcher read model.
 
