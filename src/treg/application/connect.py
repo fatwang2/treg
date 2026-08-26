@@ -320,6 +320,9 @@ async def start_oauth_connection(
         if not name:
             raise ConnectError("invalid_provider", "name is required")
 
+        # Reconnecting targets ONE connection. Scoped to the caller's org so a guessed id can't aim a
+        # consent at another org's credential, and matched to the provider so a Slack consent can't be
+        # made to overwrite a Google one.
         replaces_id = None
         if connection_id is not None:
             target = (await db.execute(select(Secret).where(
@@ -337,6 +340,8 @@ async def start_oauth_connection(
 
         state = crypto.new_token()
         treg_callback = f"{get_settings().public_url.rstrip('/')}/oauth/callback"
+        # The code must come back to treg's OWN callback — a body-supplied redirect_uri pointing elsewhere
+        # turns this into a consent-phishing URL builder (a legit provider link that routes the code away).
         if redirect_uri and redirect_uri.rstrip("/") != treg_callback:
             raise ConnectError("invalid_provider", "redirect_uri must be treg's own /oauth/callback")
         redirect_uri = redirect_uri or treg_callback
@@ -359,15 +364,18 @@ async def complete_oauth_connection(
     *, state: str, code: str, error: str, client_factory,
 ) -> OAuthCallbackOutcome:
     async with session_maker() as db:
+        # Hit by the BROWSER on redirect — no token; protected by the unguessable `state`.
         pending = (
             await db.execute(select(PendingOAuth).where(PendingOAuth.state == state))
         ).scalar_one_or_none()
         if pending is None:
             return OAuthCallbackOutcome("invalid")
         if pending.status != "pending":
+            # A browser re-load re-hits this URL with a now-spent code; re-exchanging would fail and
+            # flip a successful connect's status to "error". Return the terminal result without redoing it.
             return OAuthCallbackOutcome("done" if pending.status == "done" else "already_failed")
         if _as_naive(pending.created_at) < _utcnow_naive() - timedelta(minutes=health.OAUTH_PENDING_TTL_MIN):
-            pending.status, pending.detail = "error", "expired"
+            pending.status, pending.detail = "error", "expired"  # an old state must not stay redeemable
             await db.commit()
             return OAuthCallbackOutcome("expired")
         if error or not code:
@@ -379,11 +387,16 @@ async def complete_oauth_connection(
             client = client_factory()
             blob = await oauth.exchange_code(pending, code, client)
             provider = oauth_providers.get(pending.provider) if pending.provider else None
+            # A consent either REPLACES one named connection or ADDS another. `replaces_secret_id` says
+            # which, decided back at /oauth/start where the user's intent was known. This used to
+            # blanket-replace by provider, which fixed the real bug — widening read→write silently made
+            # a second google-search-console row — at the cost of banning a second account entirely.
             secret = None
             if pending.replaces_secret_id is not None:
                 secret = (await db.execute(select(Secret).where(
                     Secret.id == pending.replaces_secret_id, Secret.org_id == pending.org_id
                 ))).scalars().first()
+                # Deleted between consent and callback: fall through and add it back rather than 500.
             if secret is None:
                 secret = Secret(
                     org_id=pending.org_id,
@@ -396,10 +409,17 @@ async def complete_oauth_connection(
                 secret.value = crypto.encrypt(json.dumps(blob))
                 secret.last_error = ""
             secret.provider = pending.provider or ""
+            # granted_scopes stays canonically SPACE-joined whatever dialect went over the wire, so the
+            # readers (satisfied_capabilities, the health payload) can keep using a plain .split().
+            # TikTok comma-joins its consent scopes; without this normalisation a whole grant would
+            # come back as one bogus scope string and every capability would read as unsatisfied.
             separator = pending.scope_separator or " "
             secret.granted_scopes = " ".join(s for s in pending.scopes.split(separator) if s)
             secret.expires_at = oauth.expiry_of(blob)
             await db.flush()
+            # A connect that yields no callable tool is a dead end — the user consented and got
+            # nothing. Auto-provision the provider's tool bound to this credential so the very next
+            # thing they can do is make a real proxied call.
             if provider and provider.can_autoprovision:
                 await _autoprovision_provider_tool(provider, secret, pending, db)
             if provider and provider.has_identity:
@@ -407,7 +427,7 @@ async def complete_oauth_connection(
             pending.status, pending.secret_id, pending.detail = "done", secret.id, "connected"
             await db.commit()
         except Exception as exc:  # noqa: BLE001
-            print(f"[oauth] token exchange failed for state {state}: {exc}")
+            print(f"[oauth] token exchange failed for state {state}: {exc}")  # detail stays server-side
             pending.status, pending.detail = "error", "token exchange failed"
             await db.commit()
             return OAuthCallbackOutcome("exchange_failed")
@@ -423,16 +443,26 @@ async def connect_with_pasted_secret(
     token = raw_token.strip()
     if not token:
         raise ConnectError("invalid_token", f"{provider.token_label or 'Token'} is required")
+    # HTTP Basic providers (DataForSEO, Moz) take a pasted `login:password`; store the Base64 blob so
+    # `Basic {secret}` renders the same at connect and on every proxy call. Both dashboards ALSO hand
+    # out a ready-made Base64 credential, and users paste that at least as often as the raw pair —
+    # encoding it again produced a double-encoded blob the provider 401'd. So: if the paste already IS
+    # Base64 of a printable `login:password`, keep it. A raw pair can never be mistaken for one (":"
+    # is not in the Base64 alphabet, so strict decoding refuses it), and a Base64 blob can never be
+    # a working raw pair (it has no ":"), so the branch is unambiguous either way.
     if provider.token_encode == "base64":
         already = None
         try:
             decoded = base64.b64decode(token, validate=True).decode()
             if ":" in decoded and decoded.isprintable():
                 already = token
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001 — not Base64, or not text: encode it below
             pass
         token = already or base64.b64encode(token.encode()).decode()
 
+    # The credential rides in a header (default) or a query param (Semrush: ?key=…). The cheapest
+    # check may also live on a different host than base_url, so honor an absolute probe_url override,
+    # and a POST probe with a JSON body (Serpstat's JSON-RPC limits call).
     rendered = provider.token_format.format(secret=token)
     if provider.token_location == "query":
         headers, params = {}, {provider.token_param: rendered}
@@ -440,6 +470,10 @@ async def connect_with_pasted_secret(
         headers, params = {provider.token_header: rendered}, {}
     headers.update(dict(provider.required_headers))
     probe_url = provider.probe_url or f"{provider.base_url.rstrip('/')}{provider.probe_path}"
+    # httpx REPLACES a URL's own query string when `params=` is passed, so a probe_path like
+    # `/autocomplete?field=title&text=data` (PDL, Akta, JustOneAPI, SpyFu) silently lost its required
+    # params and the probe 400'd — rejecting a perfectly good key. Merge the path's query into params
+    # ourselves (params, i.e. the credential for a query provider, wins on a key collision).
     split = urlsplit(probe_url)
     if split.query:
         params = {**dict(parse_qsl(split.query, keep_blank_values=True)), **params}
@@ -454,6 +488,11 @@ async def connect_with_pasted_secret(
         raise ConnectError(
             "provider_unreachable", f"could not reach {provider.display_name}: {exc}"
         ) from None
+    # Try to parse the body as JSON regardless of the content-type header: ScrapeCreators returns a
+    # real JSON body labelled `text/plain`, and gating on `application/json` left its payload empty so
+    # `token_verify_field` (creditCount) read as false and a valid key was rejected. The parse is
+    # defensive — a genuinely non-JSON key check (Semrush's CSV/number balance) simply throws and
+    # leaves payload empty, falling through to the `text_error` branch exactly as before.
     ctype = resp.headers.get("content-type", "")
     payload: dict = {}
     if resp.status_code < 500:
@@ -462,9 +501,14 @@ async def connect_with_pasted_secret(
             payload = parsed if isinstance(parsed, dict) else {}
         except Exception:  # noqa: BLE001
             payload = {}
+    # Some providers answer HTTP 200 even for a BAD key and signal validity only in the body: a JSON
+    # field (Slack: "ok"; Apollo: "is_logged_in") or an "ERROR ..." text line (Semrush). An HTTP
+    # status alone would happily accept a dead key, so check all three signals.
     field_bad = bool(provider.token_verify_field) and not payload.get(provider.token_verify_field)
     field_reject = bool(provider.token_reject_field) and bool(payload.get(provider.token_reject_field))
     equals_bad = bool(provider.token_ok_field) and str(payload.get(provider.token_ok_field)) != provider.token_ok_value
+    # Usually any >=400 is a bad key; a provider with no free probe (Coresignal) POSTs an empty body so
+    # a VALID key answers 400 — there only 401/403 mean the key itself is bad.
     status_reject = (
         resp.status_code in provider.probe_reject_statuses
         if provider.probe_reject_statuses else resp.status_code >= 400
