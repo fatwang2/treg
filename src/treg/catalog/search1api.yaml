@@ -1,0 +1,28 @@
+provider: search1api
+source:
+  docs: https://s1.dev/docs
+  openapi: https://api.search1api.com/openapi.json
+  curated: 2026-08-26
+
+# Prices transcribed from https://s1.dev/pricing (page last-updated 2026-08-22). Native unit is
+# credits. USD equivalent uses the Basic plan $19 / 25,000 credits ≈ $0.00076 per credit
+# (≈$0.76 per 1k one-credit requests). Vendor skipped live meter reconciliation; do not stamp
+# verified:. GET /health is unauthenticated and is NOT the probe — GET /usage is.
+#
+# Observed bad-key probe, 2026-08-26: GET /usage with Authorization: Bearer <garbage>
+# → HTTP 401, body {"error":"Unauthorized: Invalid bearer credential","ok":false}.
+#
+# Do not use OpenAPI x-payment-info MPP/x402 dollar prices; those are pay-per-request without
+# an account, not the credit plan a pasted key is billed on.
+
+limits: "concurrency scales with plan; Free is lower than Basic/Professional/Enterprise"
+pricing_url: https://s1.dev/pricing
+
+proposed_capabilities:
+  web.search: "Search the live public web and get ranked results"
+  news.search: "Search recent news articles"
+  web.crawl: "Fetch a URL and return readable page text"
+  web.screenshot: "Render a webpage as an image"
+  web.sitemap: "List sitemap or on-page URLs for a site"
+  web.extract: "Extract structured fields from a URL with a prompt"
+  web.trending: "List currently popular items on a supported platform"
