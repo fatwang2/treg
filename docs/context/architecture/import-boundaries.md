@@ -4,6 +4,8 @@ status: shipped
 sources:
   - pyproject.toml
   - .github/workflows/ci.yml
+  - src/treg/domain/__init__.py
+  - src/treg/domain/identity/__init__.py
   - tests/test_import_lightness.py
 related:
   - architecture/composition.md
@@ -34,8 +36,13 @@ Stage 1 activated the first two contracts:
 Stage 2 adds a third contract: the complete `treg.routers` package cannot import `treg.api`, directly or
 indirectly. `as_packages = true` makes the source cover every current and future router submodule.
 `api.py` remains the compatibility exporter and ordered route-table host, so the allowed direction is
-API to routers. Application and domain layer contracts remain absent until those packages are migrated
-in later stages. Activating them earlier would describe a target tree rather than enforce the current one.
+API to routers.
+
+Stage 3 adds the first domain contract: the complete `treg.domain.identity` package cannot import
+`treg.api`, `treg.routers`, or `treg.application`. Identity now owns session signing and validation,
+MCP token and grant-family primitives, and caller/access resolution as a leaf. Sibling-domain
+contracts remain absent until those domain packages exist; no placeholder domains are created just to
+make a future boundary look active.
 
 Two direct edges are precise exceptions. `cli.ensure_proxy_dependency` imports `cryptography` only after
 the user invokes the optional proxy feature and offers to install the proxy extra first.

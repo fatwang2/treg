@@ -6,9 +6,13 @@ sources:
   - src/treg/api.py
   - src/treg/routers/__init__.py
   - src/treg/routers/admin.py
+  - src/treg/routers/auth_helpers.py
   - src/treg/routers/catalog.py
-  - src/treg/routers/dependencies.py
+  - src/treg/routers/signup_cookies.py
   - src/treg/routers/web.py
+  - src/treg/domain/identity/access.py
+  - src/treg/domain/identity/mcp_oauth.py
+  - src/treg/domain/identity/session.py
   - src/treg/timeutil.py
   - src/treg/catalog_store.py
   - src/treg/email.py
@@ -61,8 +65,8 @@ falls through and finds no usable marketplace credential. A genuine URL-passthro
 with the names of the colliding usable tools and the explicit `/call/<name>/<path>` escape hatch.
 
 ## Auth
-The shared HTTP dependency family is defined in `routers.dependencies` and re-exported by `api.py`
-during the staged route migration. `require_member()` reads the `X-Treg-Token` header, hashes it
+The shared identity/access dependency family is defined in `domain.identity.access` and re-exported by
+`api.py` during the staged route migration. `require_member()` reads the `X-Treg-Token` header, hashes it
 (`crypto.hash_token`), looks up the
 `Membership` by `token_hash`, and returns a `Caller` (`membership, user, org` + `org_id`/`email`/`role`);
 401 on missing/invalid. Every scoped endpoint depends on it **except** `POST /users` + `POST
@@ -70,6 +74,11 @@ during the staged route migration. `require_member()` reads the `X-Treg-Token` h
 Authz = org scoping + a role gate: `_can_manage` lets admin/owner manage any org resource, a member only
 what they created; `_require_admin_of` gates the org-admin endpoints. See
 [multi-tenancy](../architecture/multi-tenancy.md).
+
+Cookie mechanics stay at the HTTP boundary: OAuth return-path parking lives in
+`routers.auth_helpers`, and signup referral parking lives in `routers.signup_cookies`. Neither helper
+belongs to the identity domain because both interpret request cookies and the referral helper also
+normalizes through the referrals subsystem.
 
 ## Endpoints
 - **Users / orgs:** `register_user` (`POST /users`, open, legacy — used by the test fixture) creates the

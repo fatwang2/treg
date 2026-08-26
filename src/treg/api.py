@@ -54,9 +54,34 @@ from sqlmodel import select
 
 from . import adsconv, agent_pages, analytics, audit, billing, catalog_store, crypto, demo as demo_seed, email as email_sender, health, injectors, ledger, localrun, oauth
 from . import oauth_providers
-from . import pubfeed, ratestore, reconcile, referrals, runner, sandbox as demo_sandbox, session as sess
+from . import pubfeed, ratestore, reconcile, referrals, runner, sandbox as demo_sandbox
 from .config import LEGACY_PUBLIC_HOSTS, PUBLIC_HOST_ALIASES, get_settings, platform_setting_name
 from .db import get_session, session_maker
+from .domain.identity import session as sess
+from .domain.identity.access import (
+    AGENT_DOMAIN,
+    PUBLIC_DEMO_DOMAIN,
+    Caller,
+    _is_agent_email,
+    _is_machine_email,
+    _membership_by_token,
+    _norm_email,
+    _resolve_org,
+    _role_at_least,
+    _user_from_identity_token,
+    _user_from_session,
+    require_identity,
+    require_member,
+    require_superadmin,
+)
+from .domain.identity.mcp_oauth import (
+    REFRESH_TTL_S,
+    _ensure_grant,
+    _family_org,
+    _issue_refresh,
+    _refresh_is_live,
+    _revoke_refresh_family,
+)
 from .models import (ROLE_RANK, AdConversion, Bundle, CallRecord, CapabilityPin, CreditBlock,
                      DenyRule, Hold, IdempotentCall, Invite, LedgerEntry, Membership, OAuthClient,
                      OAuthCode, OAuthGrant, OAuthRefresh, Org, PendingOAuth, Project, Referral,
@@ -92,29 +117,17 @@ from .routers.catalog import (
     catalog_platforms,
     catalog_search,
 )
-from .routers.dependencies import (
-    AGENT_DOMAIN,
+from .routers.auth_helpers import (
     OAUTH_RETURN_COOKIE,
-    PUBLIC_DEMO_DOMAIN,
+    _is_https,
+    _remember_oauth_return,
+    _take_oauth_return,
+)
+from .routers.signup_cookies import (
     REFERRAL_COOKIE,
     REFERRAL_COOKIE_MAX_AGE,
-    Caller,
-    _is_agent_email,
-    _is_https,
-    _is_machine_email,
-    _membership_by_token,
-    _norm_email,
-    _remember_oauth_return,
     _remember_referral,
-    _resolve_org,
-    _role_at_least,
-    _take_oauth_return,
     _take_referral,
-    _user_from_identity_token,
-    _user_from_session,
-    require_identity,
-    require_member,
-    require_superadmin,
 )
 from .routers import web as web_routes
 from .routers.web import (
@@ -1390,7 +1403,7 @@ async def oauth_register(body: OAuthClientRegistration,
     What is NOT open is the redirect URI. It is fixed here and matched exactly at authorize time,
     because that is where authorization codes get delivered.
     """
-    from . import mcp_oauth
+    from .domain.identity import mcp_oauth
 
     uris = [u for u in body.redirect_uris if mcp_oauth.valid_redirect_uri(u)]
     if not uris:
@@ -1423,7 +1436,7 @@ async def _resolve_oauth_client(client_id: str, db: AsyncSession) -> OAuthClient
     on first sight, cached as a row, and refreshed when stale — documents change, and a cache that
     never expires would pin a client to redirect URIs it has since retired.
     """
-    from . import mcp_oauth
+    from .domain.identity import mcp_oauth
 
     row = (await db.execute(select(OAuthClient).where(OAuthClient.client_id == client_id))
            ).scalar_one_or_none()
@@ -1451,91 +1464,6 @@ async def _resolve_oauth_client(client_id: str, db: AsyncSession) -> OAuthClient
 
 
 AUTH_CODE_TTL_S = 300   # a code is redeemed within seconds; five minutes is generous, not a window
-REFRESH_TTL_S = 30 * 24 * 3600   # a connector the user still uses keeps working for a month
-
-
-async def _ensure_grant(family_id: str, db: AsyncSession) -> OAuthGrant | None:
-    """Return this family's authority row, reconstructing a rolling-deploy gap if necessary.
-
-    A35 backfilled every family that existed when a new instance started, but a rolling deploy runs
-    old and new binaries together. An old instance can therefore issue another OAuthRefresh AFTER
-    the one-time backfill, without the OAuthGrant row it knows nothing about. Listing then showed a
-    null team, team moves answered 404, and the first rotation made the grant look newly consented.
-
-    The oldest refresh row is the only surviving consent-time authority for such a family. The raw
-    upsert is intentional: both supported databases implement this spelling, and ON CONFLICT makes
-    two new instances repairing the same old-binary write converge instead of racing into a unique
-    constraint failure.
-    """
-    grant = await db.get(OAuthGrant, family_id)
-    if grant is not None:
-        return grant
-    oldest = (await db.execute(select(OAuthRefresh).where(
-        OAuthRefresh.family_id == family_id
-    ).order_by(OAuthRefresh.created_at, OAuthRefresh.id).limit(1))).scalars().first()
-    if oldest is None:
-        return None
-    await db.execute(text(
-        "INSERT INTO oauthgrant (family_id, current_org_id, granted_at) "
-        "VALUES (:family_id, :org_id, :granted_at) "
-        "ON CONFLICT (family_id) DO NOTHING"
-    ), {"family_id": family_id, "org_id": oldest.org_id, "granted_at": oldest.created_at})
-    return await db.get(OAuthGrant, family_id)
-
-
-async def _family_org(family_id: str, db: AsyncSession) -> int | None:
-    """Which team future tokens in this grant family spend from.
-
-    Mutable family authority has its own row. Token rows retain the team each token was issued under
-    so a later replay audit keeps its original attribution. The previous oldest-token authority made
-    moves stick across refresh races, but only by rewriting retired history.
-
-    The residual window is the one no design without distributed locking removes: an access token
-    already minted for the old team keeps working until it expires (≤ ACCESS_TTL_SECONDS). The
-    FAMILY, though, converges on the move — the next rotation reads this row and mints for the new
-    team — so the move is never undone, only briefly overlapped.
-    """
-    grant = await _ensure_grant(family_id, db)
-    return grant.current_org_id if grant is not None else None
-
-
-def _refresh_is_live(row: OAuthRefresh, *, now: datetime | None = None) -> bool:
-    """One definition of a usable grant token, shared by refresh, listing and team moves."""
-    now = now or datetime.now(timezone.utc).replace(tzinfo=None)
-    return row.retired_at is None and row.expires_at >= now
-
-
-async def _issue_refresh(*, family_id: str, client_id: str, user_id: int, org_id: int,
-                         resource: str, scope: str, db: AsyncSession) -> str:
-    """Mint a refresh token and store only its hash — a database copy is a database leak."""
-    import secrets as _s
-
-    if await db.get(OAuthGrant, family_id) is None:
-        db.add(OAuthGrant(family_id=family_id, current_org_id=org_id))
-    token = _s.token_urlsafe(40)
-    db.add(OAuthRefresh(
-        token_hash=crypto.hash_token(token), family_id=family_id, client_id=client_id,
-        user_id=user_id, org_id=org_id, resource=resource, scope=scope,
-        expires_at=datetime.now(timezone.utc).replace(tzinfo=None)
-        + timedelta(seconds=REFRESH_TTL_S)))
-    return token
-
-
-async def _revoke_refresh_family(family_id: str, reason: str, db: AsyncSession) -> int:
-    """Kill every refresh token descended from one grant.
-
-    Called when a retired token is presented again. We cannot tell a client retrying after a dropped
-    response from a thief replaying a stolen copy — so we assume the worse one, because the cost of
-    being wrong is a re-login rather than someone else's balance.
-    """
-    rows = (await db.execute(select(OAuthRefresh).where(
-        OAuthRefresh.family_id == family_id, OAuthRefresh.retired_at.is_(None)))).scalars().all()
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
-    for r in rows:
-        r.retired_at, r.retired_reason = now, reason
-        db.add(r)
-    return len(rows)
-
 _CONSENT_CSS = """
 .consent{max-width:460px;text-align:left}
 .consent h1{font-size:20px;margin:0 0 4px}
@@ -1628,7 +1556,7 @@ def _wrong_resource(resource: str) -> str | None:
     Empty is allowed: a client that omits `resource` gets our canonical one, which is what it would
     have discovered anyway.
     """
-    from . import mcp_oauth
+    from .domain.identity import mcp_oauth
 
     if not resource:
         return None
@@ -1646,7 +1574,7 @@ def _same_mcp_resource(a: str, b: str) -> bool:
     or BOTH normalize into the canonical+legacy audience set — the domain move renamed the
     resource without changing it, so a grant consented on one name must stay exchangeable and
     refreshable by a client re-based onto the other (in either direction)."""
-    from . import mcp_oauth
+    from .domain.identity import mcp_oauth
 
     na, nb = mcp_oauth.normalize_resource(a), mcp_oauth.normalize_resource(b)
     if a == b or na == nb:
@@ -1682,7 +1610,7 @@ async def _authorize_request(client_id: str, redirect_uri: str, response_type: s
     are known-good there is nowhere safe to send an error. Everything after that can be reported to
     the client properly.
     """
-    from . import mcp_oauth
+    from .domain.identity import mcp_oauth
 
     client = await _resolve_oauth_client(client_id, db) if client_id else None
     if client is None:
@@ -1786,7 +1714,7 @@ async def oauth_authorize_approve(
     request; on anything else, tell the client no."""
     import secrets as _s
 
-    from . import mcp_oauth
+    from .domain.identity import mcp_oauth
 
     # The consent form is the security boundary, so the submission must have come from OUR page.
     # Without this, a page anywhere could auto-submit a form and grant itself a team's balance —
@@ -1848,7 +1776,7 @@ async def _refresh_grant(*, refresh_token: str, client_id: str, resource: str,
     looks merely unknown, while a retired one tells us somebody used a credential that had already
     been spent — and at that point the safe reading is that it was copied.
     """
-    from . import mcp_oauth
+    from .domain.identity import mcp_oauth
 
     if not refresh_token:
         return bad("invalid_request", "refresh_token is required")
@@ -1943,7 +1871,7 @@ async def oauth_token(
     Errors here are JSON, not redirects: this is a back-channel call from the client itself, and
     there is no browser to send anywhere.
     """
-    from . import mcp_oauth
+    from .domain.identity import mcp_oauth
 
     def bad(err: str, desc: str, status: int = 400):
         return JSONResponse(status_code=status,
@@ -2004,7 +1932,7 @@ async def oauth_protected_resource():
     Two paths for one document: the spec has clients look it up either at the host root or under the
     resource's own path, and which one a given client tries is not something we get to choose.
     """
-    from . import mcp_oauth
+    from .domain.identity import mcp_oauth
 
     return JSONResponse(mcp_oauth.protected_resource_metadata(),
                         headers={"Cache-Control": "public, max-age=3600"})
@@ -2014,7 +1942,7 @@ async def oauth_protected_resource():
 async def oauth_authorization_server():
     """How to get a token: the authorize and token endpoints, S256, and that we accept both dynamic
     registration and a client-id metadata document."""
-    from . import mcp_oauth
+    from .domain.identity import mcp_oauth
 
     return JSONResponse(mcp_oauth.authorization_server_metadata(),
                         headers={"Cache-Control": "public, max-age=3600"})
@@ -2805,7 +2733,7 @@ async def oauth_grant_set_team(family_id: str, body: GrantTeamIn,
     Only the GRANT'S OWN user may move it, and only to a team THEY are a member of — a grant must
     never become a way to reach a team the consent screen would not have offered.
     """
-    from . import mcp_oauth
+    from .domain.identity import mcp_oauth
 
     rows = (await db.execute(select(OAuthRefresh).where(
         OAuthRefresh.family_id == family_id, OAuthRefresh.user_id == user.id,

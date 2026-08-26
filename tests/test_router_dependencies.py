@@ -1,13 +1,13 @@
-"""Compatibility checks for the shared router dependency extraction."""
+"""Compatibility checks for the identity-domain dependency extraction."""
 
 from treg import api, timeutil
-from treg.routers import dependencies
+from treg.domain.identity import access
+from treg.routers import auth_helpers
 
 
 def test_api_reexports_shared_http_dependencies() -> None:
     names = (
         "Caller",
-        "_is_https",
         "_membership_by_token",
         "_resolve_org",
         "_role_at_least",
@@ -18,7 +18,8 @@ def test_api_reexports_shared_http_dependencies() -> None:
         "require_superadmin",
     )
     for name in names:
-        assert getattr(api, name) is getattr(dependencies, name)
+        assert getattr(api, name) is getattr(access, name)
+    assert api._is_https is auth_helpers._is_https
 
 
 def test_api_reexports_shared_time_convention() -> None:

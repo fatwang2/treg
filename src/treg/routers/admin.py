@@ -16,7 +16,7 @@ from ..db import get_session, session_maker
 from ..models import Bundle, CallRecord, Membership, Org, Referral, Secret, Tool, User
 from ..timeutil import as_naive as _as_naive
 from ..timeutil import utcnow_naive as _utcnow_naive
-from .dependencies import require_superadmin
+from ..domain.identity.access import require_superadmin
 
 
 # The app alias preserves the moved handlers' original @app.get decorator text byte-for-byte.

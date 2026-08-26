@@ -3,6 +3,8 @@ title: Application composition and deployment roles
 status: shipped
 sources:
   - src/treg/bootstrap.py
+  - src/treg/domain/identity/mcp_oauth.py
+  - src/treg/domain/identity/session.py
   - src/treg/routers/admin.py
   - src/treg/routers/web.py
   - scripts/dump_surface.py
@@ -58,6 +60,8 @@ Every created app exposes `app.state.role_manifest` with explicit `routes`, `bac
 MCP is calling traffic (the refactor plan's role table assigns `mcp.py` to the dataplane), so a future
 dataplane deployment serves agents on both entry points. OAuth token issuance - consent pages and the
 `/oauth/*` endpoints - stays on control; the MCP surface only validates tokens, which is a read.
+`domain.identity.session` is therefore a both-role primitive: control signs browser and identity
+tokens, while both roles share its signing-key validation through `domain.identity.mcp_oauth`.
 
 `_CONTROL_ROUTE_KEYS` and `_DATAPLANE_ROUTE_KEYS` assign every `api.router` route to exactly one
 owner. App creation fails on an unclassified, stale, duplicate, or multiply-owned key, so adding a

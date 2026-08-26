@@ -132,6 +132,13 @@ source_modules = ["treg.routers"]
 forbidden_modules = ["treg.api"]
 as_packages = true
 
+[[tool.importlinter.contracts]]
+name = "Identity domain does not depend on outer layers"
+type = "forbidden"
+source_modules = ["treg.domain.identity"]
+forbidden_modules = ["treg.api", "treg.routers", "treg.application"]
+as_packages = true
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 # asyncpg connections are bound to the event loop that created them. The test engine is module-level,

@@ -4,6 +4,9 @@ status: shipped
 sources:
   - src/treg/mcp.py
   - src/treg/mcp_oauth.py
+  - src/treg/domain/identity/health.py
+  - src/treg/domain/identity/mcp_oauth.py
+  - src/treg/domain/identity/session.py
   - src/treg/web/connect-demo.html
 related:
   - architecture/auth-secrets.md
@@ -188,6 +191,13 @@ not mask the transport guard.
 
 Elsewhere treg speaks OAuth as a **client** (`oauth.py` signs in with GitHub, connects a provider
 account). Here it is the thing that **issues** tokens. Different direction, different module.
+
+The identity leaf owns token/resource validation and the grant-family primitives in
+`domain.identity.mcp_oauth`; `treg.mcp_oauth` remains a compatibility alias, while runtime owners use
+the domain path. Its byte-preserved client-metadata fetch still performs a lazy sibling import named
+`health`, so `domain.identity.health` aliases the root credential-network safety module. Both import
+paths therefore retain the same module object and monkeypatch target rather than creating a second
+implementation or eagerly bound function copies.
 
 Built refusal-first: the metadata and the `aud` check landed before anything could issue a token, so
 there was never a window where the server accepted credentials it had not learned to check.

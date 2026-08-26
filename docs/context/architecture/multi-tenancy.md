@@ -4,7 +4,8 @@ status: shipped
 sources:
   - src/treg/models.py
   - src/treg/api.py
-  - src/treg/routers/dependencies.py
+  - src/treg/domain/identity/access.py
+  - src/treg/domain/identity/session.py
   - src/treg/db.py
   - tests/test_router_dependencies.py
 related:
@@ -58,7 +59,7 @@ pair, so every list/create/mutation and the proxy are scoped to the caller's org
   (creator email) is kept for audit + the member role gate. `Tool.name` is unique **per `(org_id, name)`**
   (`UniqueConstraint("org_id", "name")`), so two orgs may reuse a name.
 
-## Enforcement (`routers/dependencies.py`, consumed by `api.py`)
+## Enforcement (`domain.identity.access`, consumed by `api.py` and routers)
 - **`require_member`** resolves `X-Treg-Token` → a `Membership` → a `Caller` (`membership, user, org`,
   with `org_id`/`email`/`role` properties). 401 if the token matches no membership.
 - **`_role_at_least` + `_can_manage`**: admin/owner may manage any resource in the org; a member only
@@ -134,11 +135,12 @@ pair, so every list/create/mutation and the proxy are scoped to the caller's org
   `owner = caller.email`; `_resolve_call` scopes **both** the named lookup and the host/longest-prefix
   passthrough to the org; `call_tool` loads only same-org secrets. See [proxy-model](proxy-model.md).
 
-The shared HTTP dependency family now lives in `routers.dependencies`: `Caller`, token/session/org
+The shared identity and access family lives in `domain.identity.access`: `Caller`, token/session/org
 resolution, `require_identity`, `require_member`, `require_superadmin`, role comparison, and machine
 identity classification. `api.py` re-exports the same objects so existing callers and route definitions
-retain their import path while presentation routes move out incrementally. This is a location change,
-not the Stage 3 identity or auth use-case extraction.
+retain their import path while route definitions move out incrementally. Session signing and validation
+live beside it in `domain.identity.session`; `treg.session` remains a compatibility alias, while runtime
+owners use the domain path. The former transitional `routers.dependencies` module is deleted.
 - **Registration is shared across doors:** `_find_or_create_user(db, email)` finds a user or creates them
   — **the user ONLY, no auto personal org** (as of the no-personal-org change). Every identity door calls
   it (GitHub / Google callbacks, email OTP), so "first proof = registration" is identical. A brand-new

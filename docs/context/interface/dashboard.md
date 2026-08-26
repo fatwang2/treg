@@ -13,6 +13,7 @@ sources:
   - src/treg/api.py
   - src/treg/routers/web.py
   - src/treg/session.py
+  - src/treg/domain/identity/session.py
 related:
   - interface/api.md
   - interface/landing-sandbox.md
@@ -83,7 +84,7 @@ account controls are gone.
 ## Auth — three doors
 Two are **session** (cookie) paths, one is a token fallback:
 - **GitHub (`githubLogin`):** `Continue with GitHub` → `/auth/github` → callback sets a signed HttpOnly
-  cookie (`session.py` HMAC). (Note: the button routes through a `githubLogin()` method — a Vue template
+  cookie (`domain.identity.session` HMAC). (Note: the button routes through a `githubLogin()` method — a Vue template
   expression can't reference the `location` global.)
 - **Google (`googleLogin`):** `Continue with Google` → `/auth/google` → callback, same cookie session as
   GitHub. The button shows when `/meta` reports `google:true`.

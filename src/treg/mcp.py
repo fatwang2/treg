@@ -288,7 +288,7 @@ def _oauth_claims(token: str) -> dict | None:
     is a token whose `aud` names a different resource: the user granted that to someone else's MCP
     server, and honouring it here would spend their treg balance on a consent they never gave us.
     """
-    from . import mcp_oauth
+    from .domain.identity import mcp_oauth
 
     return mcp_oauth.read_access_token_any(token)
 
@@ -327,13 +327,13 @@ async def _internal_auth(token: str) -> dict[str, str]:
         # a bare MCP bearer where no X-Treg-Org header can travel). If it does, surface that as
         # X-Treg-Org so `_resolve_org` takes its "pinned" path instead of asking "which team?" — the
         # exact failure a multi-team user hit pasting their key into an MCP client.
-        from . import session as _session
+        from .domain.identity import session as _session
         pinned = (_session.read_claims(token) or {}).get("org")
         return {"X-Treg-Token": token, "X-Treg-Org": pinned} if pinned else {"X-Treg-Token": token}
 
     from sqlmodel import select
 
-    from . import session
+    from .domain.identity import session
     from .db import session_maker
     from .models import Org, User
 
@@ -1014,7 +1014,7 @@ class RequireAuthForProtectedTools:
                 break
         if not token:
             return "missing"
-        from . import mcp_oauth
+        from .domain.identity import mcp_oauth
         if mcp_oauth.looks_like_access_token(token) and \
                 mcp_oauth.read_access_token_any(token) is None:
             return "invalid"

@@ -18,14 +18,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from .. import adsconv, agent_pages, catalog_store, oauth_providers, referrals
-from .. import session as sess
+from ..domain.identity import session as sess
 from ..config import PUBLIC_HOST_ALIASES, get_settings
 from ..db import get_session
 from ..models import User
 from .catalog import (_observed_or_empty, _platform_rows, _provider_display,
                       catalog_platform)
-from .dependencies import (OAUTH_RETURN_COOKIE, _is_https, _remember_referral,
-                           _take_oauth_return, _user_from_session)
+from ..domain.identity.access import _user_from_session
+from .auth_helpers import OAUTH_RETURN_COOKIE, _is_https, _take_oauth_return
+from .signup_cookies import _remember_referral
 
 
 LOCAL_USER_EMAIL = "you@local.treg"   # the single-user identity; a real address is never needed
