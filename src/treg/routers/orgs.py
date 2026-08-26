@@ -1,10 +1,11 @@
 """Team signup and governance HTTP routes."""
 
 import re
-from datetime import timedelta
+from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
@@ -13,8 +14,42 @@ from .. import crypto, demo as demo_seed, email as email_sender, health
 from ..application import signup as signup_use_cases
 from ..db import get_session
 from ..domain.governance import teams
-from ..domain.identity.access import Caller, _norm_email, _role_at_least, require_identity, require_member
-from ..models import Bundle, Invite, Membership, Org, Project, Tool, User
+from ..domain.identity.access import (
+    Caller,
+    _is_agent_email,
+    _is_machine_email,
+    _norm_email,
+    _role_at_least,
+    require_identity,
+    require_member,
+)
+from ..models import (
+    ROLE_RANK,
+    AdConversion,
+    Bundle,
+    CallRecord,
+    CapabilityPin,
+    CreditBlock,
+    DenyRule,
+    Hold,
+    IdempotentCall,
+    Invite,
+    LedgerEntry,
+    Membership,
+    OAuthCode,
+    OAuthGrant,
+    OAuthRefresh,
+    Org,
+    PendingOAuth,
+    Project,
+    RunRecord,
+    Secret,
+    TagBudget,
+    TagSpend,
+    Tool,
+    ToolRequest,
+    User,
+)
 from ..timeutil import as_naive as _as_naive
 from ..timeutil import utcnow_naive as _utcnow_naive
 from .auth_helpers import _is_https
@@ -111,6 +146,147 @@ async def _normalize_project_access(
     if known and ids >= by_id:
         return None  # every project selected = unrestricted, so store it as such
     return sorted(ids)
+
+
+class RoleIn(BaseModel):
+    role: str
+
+
+class CapIn(BaseModel):
+    daily_call_cap: int  # per-user, per-day usage cap for the member; -1 = unlimited
+
+
+class AccessIn(BaseModel):
+    # tool_access: None = all tools (clear the restriction); a list = the ONLY tool names allowed.
+    tool_access: list[str] | None = None
+    # project_access: None = the whole org; a list of project SLUGS or IDS = the only projects allowed.
+    # Accepts slugs because that's the human handle; stored as ids (see _normalize_project_access).
+    project_access: list[str | int] | None = None
+    local_run_enabled: bool = True
+
+
+# Every model carrying an `org_id`. Deleting the org without clearing these leaves rows pointing at
+# a row that no longer exists, and the delete fails with a 500 at the foreign key.
+#
+# This list has to be kept in step with the schema, and twice it was not: the money tables arrived
+# with the prepaid balance and `CapabilityPin` with capability pins, and neither was added here. The
+# effect was invisible until someone tried it — since every NEW team is granted $1.00, every team has
+# a CreditBlock, so NO team could be deleted at all. `test_org_delete_clears_every_org_scoped_table`
+# now walks the models module and fails if a new one is ever missed, rather than trusting this list.
+#
+# Order matters: LedgerEntry references a CreditBlock, so it goes first.
+_ORG_SCOPED_MODELS = (
+    Tool, Secret, Bundle, PendingOAuth, CallRecord, RunRecord, Invite, DenyRule, Project,
+    CapabilityPin,
+    TagBudget,
+    TagSpend,  # before the money tables it attributes: its rows reference a Hold that is about to go
+    LedgerEntry, Hold, CreditBlock,
+    OAuthCode, OAuthRefresh,   # grants naming a team that no longer exists
+    IdempotentCall,            # a remembered answer belongs to the team that paid for it
+    ToolRequest,  # attribution rows go with the team; anonymous filings carry no org_id and stay
+    AdConversion,  # pending Google Ads conversions belong to the team they'd be attributed to
+    Membership,   # last: it is what makes the caller a member of the org being deleted
+)
+
+
+async def _cascade_delete_org(org: Org, db: AsyncSession) -> None:
+    """Delete every org-scoped row then the org. Shared by owner delete_org + admin force-delete."""
+    # OAuthGrant names its mutable team `current_org_id` to distinguish family authority from the
+    # immutable `OAuthRefresh.org_id` provenance. A family can name this team on EITHER side: after
+    # a move, only a retired provenance row still names the former team. Deleting just that row
+    # destroys the replay evidence while leaving the live family authorised elsewhere, so a stolen
+    # old token becomes "unknown" instead of revoking every descendant. Revoke the union of both
+    # paths; preserving historical provenance across team deletion would need a nullable/soft FK.
+    authority_grants = (await db.execute(select(OAuthGrant).where(
+        OAuthGrant.current_org_id == org.id))).scalars().all()
+    provenance_families = (await db.execute(select(OAuthRefresh.family_id).where(
+        OAuthRefresh.org_id == org.id))).scalars().all()
+    family_ids = {grant.family_id for grant in authority_grants} | set(provenance_families)
+    if family_ids:
+        # Delete the WHOLE family, including rows issued under other teams. Keeping only the live
+        # destination token would be exactly the partial revocation that reuse detection forbids.
+        for token in (await db.execute(select(OAuthRefresh).where(
+            OAuthRefresh.family_id.in_(family_ids)))).scalars().all():
+            await db.delete(token)
+        grants = (await db.execute(select(OAuthGrant).where(
+            OAuthGrant.family_id.in_(family_ids)))).scalars().all()
+    else:
+        grants = []
+    for grant in grants:
+        await db.delete(grant)
+    await db.flush()
+    for model in _ORG_SCOPED_MODELS:
+        for r in (await db.execute(select(model).where(model.org_id == org.id))).scalars().all():
+            await db.delete(r)
+        await db.flush()   # honour the ordering above rather than leaving it to the unit of work
+    await db.delete(org)
+
+
+def _require_owner_of(org_id: int, caller: Caller) -> None:
+    """Owner-only actions (change roles, delete org). Token is org-scoped, so must match."""
+    if caller.org_id != org_id or caller.role != "owner":
+        raise HTTPException(status_code=403, detail="owner role in this org is required")
+
+
+async def _count_owners(org_id: int, db: AsyncSession) -> int:
+    rows = (
+        await db.execute(select(Membership).where(Membership.org_id == org_id, Membership.role == "owner"))
+    ).scalars().all()
+    return len(rows)
+
+
+def _day_start_utc() -> datetime:
+    """Midnight (00:00) of the current UTC day, naive — matches how *Record.created_at is stored."""
+    return _utcnow_naive().replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+async def count_today(db: AsyncSession, org_id: int | None, user_email: str) -> int:
+    """How many usage events this user has produced in this org since midnight UTC: proxy calls +
+    local-run grants (both `CallRecord`) plus server runs (`RunRecord`). Two indexed COUNTs."""
+    since = _day_start_utc()
+    calls = (await db.execute(select(func.count()).select_from(CallRecord).where(
+        CallRecord.org_id == org_id, CallRecord.user_email == user_email, CallRecord.created_at >= since,
+    ))).scalar_one()
+    runs = (await db.execute(select(func.count()).select_from(RunRecord).where(
+        RunRecord.org_id == org_id, RunRecord.user_email == user_email, RunRecord.created_at >= since,
+    ))).scalar_one()
+    return calls + runs
+
+
+async def _used_today_by_user(db: AsyncSession, org_id: int) -> dict[str, int]:
+    """{user_email: events today} for every member of the org — one grouped COUNT per table, so the
+    members list gets everyone's usage without an N+1 fan-out. Spans all kinds (calls + local + server)."""
+    since = _day_start_utc()
+    counts: dict[str, int] = {}
+    for email, n in (await db.execute(select(CallRecord.user_email, func.count()).where(
+            CallRecord.org_id == org_id, CallRecord.created_at >= since).group_by(CallRecord.user_email))).all():
+        counts[email] = counts.get(email, 0) + n
+    for email, n in (await db.execute(select(RunRecord.user_email, func.count()).where(
+            RunRecord.org_id == org_id, RunRecord.created_at >= since).group_by(RunRecord.user_email))).all():
+        counts[email] = counts.get(email, 0) + n
+    return counts
+
+
+async def _drop_member_deny_rules(db: AsyncSession, user_id: int, org_id: int | None = None) -> int:
+    """Delete the member-scoped rules that named a member/agent who is going away — the caller they
+    were written for no longer exists, so the rule can never fire again. Left behind, they show up in
+    the Policy table as a row naming a user id the team can no longer see or clean up. Mirrors how
+    `delete_project` sweeps the id it deletes out of every `project_access`.
+
+    `org_id` set = that org only (the member left THIS team but may still be in others). `org_id`
+    None = every org, for when the USER row itself is deleted — `DenyRule.user_id` is a foreign key,
+    so a surviving rule would dangle, which Postgres rejects outright (SQLite does not enforce it by
+    default, which is why only a real deployment would have shown this).
+
+    ORG-wide rules (`user_id` NULL) are untouched: they are about the team, not about one caller.
+    The caller commits — this only stages the deletes, so it composes with the removal itself."""
+    q = select(DenyRule).where(DenyRule.user_id == user_id)
+    if org_id is not None:
+        q = q.where(DenyRule.org_id == org_id)
+    stale = (await db.execute(q)).scalars().all()
+    for rule in stale:
+        await db.delete(rule)
+    return len(stale)
 
 
 _SIGNUP_HTTP_ERRORS = {
@@ -404,3 +580,185 @@ async def revoke_invite(
     await db.delete(invite)  # the code can no longer be accepted
     await db.commit()
     return {"revoked_invite": invite_id}
+
+
+app = APIRouter()
+member_list_router = app
+
+
+@app.get("/orgs/{org_id}/members")
+async def list_members(
+    org_id: int, caller: Caller = Depends(require_member), db: AsyncSession = Depends(get_session)
+) -> list[dict]:
+    _require_admin_of(org_id, caller)
+    memberships = (await db.execute(select(Membership).where(Membership.org_id == org_id))).scalars().all()
+    users = {  # batch the user lookup (was one db.get per member)
+        u.id: u for u in (await db.execute(
+            select(User).where(User.id.in_([m.user_id for m in memberships]))
+        )).scalars().all()
+    }
+    used = await _used_today_by_user(db, org_id)  # one grouped query, not N+1
+    out: list[dict] = []
+    for m in memberships:
+        user = users.get(m.user_id)
+        if user is not None:
+            out.append({"user_id": user.id, "email": user.email, "role": m.role,
+                        "daily_call_cap": m.daily_call_cap, "used_today": used.get(user.email, 0),
+                        "tool_access": m.tool_access, "project_access": m.project_access,
+                        "local_run_enabled": m.local_run_enabled,
+                        # so the dashboard can separate people from machines in one roster —
+                        # agents carry their short name + owner, so the UI never shows the raw
+                        # machine address and can group each agent under its creator
+                        "is_agent": _is_agent_email(user.email),
+                        "name": (_agent_name(caller.org, user.email)
+                                 if _is_agent_email(user.email) else None),
+                        "created_by": m.created_by})
+    return out
+
+
+app = APIRouter()
+member_management_router = app
+
+
+@app.patch("/orgs/{org_id}/members/{user_id}/cap")
+async def set_member_cap(
+    org_id: int, user_id: int, body: CapIn,
+    caller: Caller = Depends(require_member), db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Set a member's per-user daily usage cap (admin/owner). `-1` = unlimited; any other negative is
+    rejected. Separate from role (owner-only) — capping is a management action, not a privilege change."""
+    _require_admin_of(org_id, caller)
+    if body.daily_call_cap < -1:
+        raise HTTPException(status_code=422, detail="daily_call_cap must be -1 (unlimited) or >= 0")
+    membership = (await db.execute(
+        select(Membership).where(Membership.org_id == org_id, Membership.user_id == user_id)
+    )).scalar_one_or_none()
+    if membership is None:
+        raise HTTPException(status_code=404, detail="not a member of this org")
+    membership.daily_call_cap = body.daily_call_cap
+    await db.commit()
+    return {"user_id": user_id, "org_id": org_id, "daily_call_cap": body.daily_call_cap}
+
+
+@app.patch("/orgs/{org_id}/members/{user_id}/access")
+async def set_member_access(
+    org_id: int, user_id: int, body: AccessIn,
+    caller: Caller = Depends(require_member), db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Set which tools a member may call/run (`tool_access`: None = all, else the allowed names) and
+    whether they may run locally (`local_run_enabled`). Admin/owner only; an owner can't be restricted."""
+    _require_admin_of(org_id, caller)
+    membership = (await db.execute(
+        select(Membership).where(Membership.org_id == org_id, Membership.user_id == user_id)
+    )).scalar_one_or_none()
+    if membership is None:
+        raise HTTPException(status_code=404, detail="not a member of this org")
+    if membership.role == "owner":
+        raise HTTPException(status_code=403, detail="an owner always has full access; it can't be restricted")
+    membership.tool_access = _normalize_tool_access(body.tool_access, await _known_access_names(org_id, db))
+    # Only touch the project scope when the caller actually SENT the field. Without this, any client
+    # that PATCHes just tool_access or local_run_enabled (the dashboard's local-run toggle does exactly
+    # that) would silently clear the member's project scoping, because the field defaults to None.
+    if "project_access" in body.model_fields_set:
+        membership.project_access = await _normalize_project_access(body.project_access, org_id, db)
+    membership.local_run_enabled = body.local_run_enabled
+    await db.commit()
+    return {"user_id": user_id, "org_id": org_id, "tool_access": membership.tool_access,
+            "project_access": membership.project_access,
+            "local_run_enabled": membership.local_run_enabled}
+
+
+@app.get("/usage/me")
+async def my_usage(
+    caller: Caller = Depends(require_member), db: AsyncSession = Depends(get_session),
+) -> dict:
+    """The caller's own usage today + cap for the active org — so a member sees 'used / cap' without
+    admin access. `cap` is -1 when unlimited."""
+    return {"org": caller.org.slug, "used_today": await count_today(db, caller.org_id, caller.email),
+            "cap": caller.membership.daily_call_cap}
+
+
+@app.delete("/orgs/{org_id}/members/{user_id}")
+async def remove_member(
+    org_id: int, user_id: int, caller: Caller = Depends(require_member), db: AsyncSession = Depends(get_session)
+) -> dict:
+    _require_admin_of(org_id, caller)
+    membership = (
+        await db.execute(
+            select(Membership).where(Membership.org_id == org_id, Membership.user_id == user_id)
+        )
+    ).scalar_one_or_none()
+    if membership is None:
+        raise HTTPException(status_code=404, detail="not a member of this org")
+    if membership.role == "owner":  # only an owner manages owners; an admin cannot remove one
+        raise HTTPException(status_code=403, detail="owners cannot be removed")
+    await db.delete(membership)  # revokes that user's token for this org
+    await _drop_member_deny_rules(db, user_id, org_id)
+    await db.commit()
+    return {"removed": user_id}
+
+
+@app.patch("/orgs/{org_id}/members/{user_id}")
+async def set_member_role(
+    org_id: int, user_id: int, body: RoleIn,
+    caller: Caller = Depends(require_member), db: AsyncSession = Depends(get_session),
+) -> dict:
+    _require_owner_of(org_id, caller)  # only an owner changes roles (incl. transferring ownership)
+    if body.role not in ROLE_RANK:
+        raise HTTPException(status_code=422, detail=f"role must be one of {sorted(ROLE_RANK)}")
+    membership = (
+        await db.execute(
+            select(Membership).where(Membership.org_id == org_id, Membership.user_id == user_id)
+        )
+    ).scalar_one_or_none()
+    if membership is None:
+        raise HTTPException(status_code=404, detail="not a member of this org")
+    if body.role == "owner":
+        # Owners short-circuit `_tool_allowed` and `_require_local_run`, so an owner machine identity
+        # would silently bypass the tool ACL and the local-run gate placed on it.
+        target = await db.get(User, user_id)
+        if target is not None and _is_machine_email(target.email):
+            raise HTTPException(status_code=422, detail="a machine identity cannot be an owner")
+    if membership.role == "owner" and body.role != "owner" and await _count_owners(org_id, db) <= 1:
+        raise HTTPException(status_code=409, detail="cannot demote the last owner — promote another owner first")
+    membership.role = body.role
+    await db.commit()
+    return {"user_id": user_id, "role": body.role, "org_id": org_id}
+
+
+@app.post("/orgs/{org_id}/leave")
+async def leave_org(
+    org_id: int, caller: Caller = Depends(require_member), db: AsyncSession = Depends(get_session)
+) -> dict:
+    if caller.org_id != org_id:  # token is org-scoped: you leave the org whose token you present
+        raise HTTPException(status_code=403, detail="use this org's token to leave it")
+    if caller.role == "owner" and await _count_owners(org_id, db) <= 1:
+        raise HTTPException(status_code=409, detail="you are the last owner — transfer ownership or delete the org")
+    await db.delete(caller.membership)  # revokes the caller's token for this org
+    await _drop_member_deny_rules(db, caller.membership.user_id, org_id)  # same sweep as remove_member
+    await db.commit()
+    return {"left_org": org_id}
+
+
+@app.delete("/orgs/{org_id}")
+async def delete_org(
+    org_id: int, confirm: str = Query(..., min_length=1),
+    caller: Caller = Depends(require_member), db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Delete a team and everything in it (owner only). `?confirm=<slug>` must match.
+
+    The confirmation is REQUIRED by the API, not just collected by the clients that already ask for
+    it. This route is irreversible and sits one path segment above every other org route, so any
+    client that normalizes `..` turns `DELETE /orgs/{id}/<anything>/..` into this call — that is how
+    `treg org unpin ..` deleted a team during testing. A request arriving without the slug it is
+    about to destroy is not a request anyone meant to send."""
+    _require_owner_of(org_id, caller)
+    org = await db.get(Org, org_id)
+    if org is None:
+        raise HTTPException(status_code=404, detail="org not found")
+    if confirm != org.slug:
+        raise HTTPException(status_code=422, detail=(
+            f"to delete this team, confirm with its slug: ?confirm={org.slug}"))
+    await _cascade_delete_org(org, db)
+    await db.commit()
+    return {"deleted_org": org_id}

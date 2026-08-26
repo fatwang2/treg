@@ -21,7 +21,7 @@ related:
 
 `bootstrap.create_app(role)` is the FastAPI composition root. `api.py` hosts the ordered route table;
 the auth module defines login, session, invite, user-token, OAuth-server, and grant-management blocks;
-the org module defines signup, team-entry, and invite-lifecycle blocks; the Catalog, web, and admin
+the org module defines signup, team-entry, invite-lifecycle, and member-management blocks; the Catalog, web, and admin
 modules define their concern-specific `APIRouter` blocks that `api.py`
 appends at their legacy registration points. It then calls the factory once at EOF so the deployed
 and documented `treg.api:app` import path remains the default `all` role.
