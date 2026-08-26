@@ -6,13 +6,11 @@ import hashlib
 import hmac
 import re
 
-from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Cookie, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
 
-from .. import crypto
 from ..application import auth as auth_use_cases
 from ..application import signup
 from ..application.auth import (
@@ -28,11 +26,8 @@ from ..application.auth import (
     OTP_START_WINDOW_S,
 )
 from ..config import PUBLIC_HOST_ALIASES, get_settings
-from ..db import get_session
 from ..domain.identity import session as sess
-from ..models import Invite, Org, User
-from ..timeutil import as_naive as _as_naive
-from ..timeutil import utcnow_naive as _utcnow_naive
+from ..models import User
 from .auth_helpers import _is_https, _same_origin
 from .web import _esc_html
 
@@ -600,27 +595,13 @@ app = APIRouter()
 invite_router = app
 
 
-async def _live_invite_by_email_token(db: AsyncSession, t: str) -> Invite | None:
-    """Resolve an emailed invite-link token to a live invite: pending, unexpired, unconsumed
-    (email_token_hash is nulled on first use), and not pointing at a platform-locked org."""
-    t = (t or "").strip()
-    if not t:
-        return None
-    invite = (await db.execute(select(Invite).where(Invite.email_token_hash == crypto.hash_token(t)))
-              ).scalar_one_or_none()
-    if (invite is None or invite.status != "pending"
-            or (invite.expires_at is not None and _as_naive(invite.expires_at) < _utcnow_naive())):
-        return None
-    org = await db.get(Org, invite.org_id)
-    if org is None or org.suspended:
-        return None
-    return invite
+_live_invite_by_email_token = auth_use_cases._live_invite_by_email_token
 
 
 @app.get("/auth/invite-signin")
 async def auth_invite_signin(
     request: Request, code: str = "", t: str = "",
-    treg_session: str = Cookie(default=""), db: AsyncSession = Depends(get_session),
+    treg_session: str = Cookie(default=""),
 ):
     """Landing for an invite email link. Two secrets, two very different trust levels:
 
@@ -638,45 +619,38 @@ async def auth_invite_signin(
     An invalid/expired secret of either kind just lands on the site."""
     from urllib.parse import quote
     base = get_settings().public_url.rstrip("/")
-    if t:
-        invite = await _live_invite_by_email_token(db, t)
-        if invite is None:
-            return RedirectResponse("/?invite_expired=1", status_code=303)
-        org = await db.get(Org, invite.org_id)
+    try:
+        landing = await auth_use_cases.invite_signin_landing(t, code, treg_session)
+    except auth_use_cases.InviteSigninError as exc:
+        if exc.kind != "expired":
+            raise
+        return RedirectResponse("/?invite_expired=1", status_code=303)
+    if isinstance(landing, auth_use_cases.InviteEmailConfirmation):
         # Already signed in as someone ELSE? Warn — continuing replaces that browser session.
         switch_note = ""
-        uid = sess.read(treg_session)
-        if uid is not None:
-            current = await db.get(User, uid)
-            if current is not None and current.email != invite.email:
-                switch_note = (f"<p>You're currently signed in as <b>{_esc_html(current.email)}</b> — "
-                               f"continuing switches this browser to <b>{_esc_html(invite.email)}</b>.</p>")
+        if landing.switch_email is not None:
+            switch_note = (f"<p>You're currently signed in as <b>{_esc_html(landing.switch_email)}</b> — "
+                           f"continuing switches this browser to <b>{_esc_html(landing.email)}</b>.</p>")
         return HTMLResponse(
             f'{_AUTH_HEAD}<body><div class="wrap"><div class="card">'
             f'<div class="logo">▚ tools-registry</div><div class="mark">👋</div>'
-            f'<h1>Join {_esc_html(org.name if org else "the team")}</h1>'
-            f'<p><b>{_esc_html(invite.invited_by or "A teammate")}</b> invited '
-            f'<b>{_esc_html(invite.email)}</b> as {_esc_html(invite.role)}.</p>{switch_note}'
+            f'<h1>Join {_esc_html(landing.org_name)}</h1>'
+            f'<p><b>{_esc_html(landing.invited_by)}</b> invited '
+            f'<b>{_esc_html(landing.email)}</b> as {_esc_html(landing.role)}.</p>{switch_note}'
             f'<form method="post" action="/auth/invite-signin" style="margin-top:18px">'
             f'<input type="hidden" name="t" value="{_esc_html(t.strip())}">'
             f'<button type="submit" class="pbtn">'
-            f'Continue as {_esc_html(invite.email)} →</button></form>'
+            f'Continue as {_esc_html(landing.email)} →</button></form>'
             f"</div></div></body></html>"
         )
-    c = (code or "").strip()
-    invite = (await db.execute(select(Invite).where(Invite.code_hash == crypto.hash_token(c)))
-              ).scalar_one_or_none() if c else None
-    if (invite is None or invite.status != "pending"
-            or (invite.expires_at is not None and _as_naive(invite.expires_at) < _utcnow_naive())):
-        return RedirectResponse("/?invite_expired=1", status_code=303)
     # Code path: same redirect whether or not the email already has an account — the code is a
     # convenience that prefills the sign-in email, never an authentication factor. A suspended
     # account is caught at the real login door, the only place the code path can mint a session.
-    return RedirectResponse(f"/?invite={quote(invite.email)}", status_code=303)
+    return RedirectResponse(f"/?invite={quote(landing.email)}", status_code=303)
 
 
 @app.post("/auth/invite-signin")
-async def auth_invite_signin_confirm(request: Request, db: AsyncSession = Depends(get_session)):
+async def auth_invite_signin_confirm(request: Request):
     """The confirm page's POST: the emailed one-time token signs the invitee in. Mirrors the OTP
     door (auth_email_verify) — find-or-create the user, refuse the suspended, set the session
     cookie — because the trust source is identical: only the inbox saw this secret. The token is
@@ -690,20 +664,17 @@ async def auth_invite_signin_confirm(request: Request, db: AsyncSession = Depend
     except Exception:  # noqa: BLE001 — any junk body = no token
         form = {}
     t = (form.get("t", [""])[0] or "").strip()
-    invite = await _live_invite_by_email_token(db, t)
-    if invite is None:  # consumed / expired / revoked / suspended org → the SPA's expired banner
-        return RedirectResponse("/?invite_expired=1", status_code=303)
-    user = await _find_or_create_user(db, invite.email)  # first click = registration (user only, no auto org)
-    if user is None or user.suspended:  # a banned account may hold the link but must not get a session
-        return _auth_page("Account suspended", "This account has been suspended.", ok=False, status=403)
-    invite.email_token_hash = None  # consume: one sign-in per emailed link
-    db.add(invite)
-    await db.commit()
-    # A share-born invite lands on the shared page itself (the SPA auto-accepts + switches org);
-    # a plain invite lands on the dashboard with the accept banner, as before. `landing` was
-    # allowlist-validated at create time, so this can never redirect off-app.
-    dest = f"{invite.landing}?invite_org={invite.org_id}" if invite.landing else f"/?invite_org={invite.org_id}"
-    resp = RedirectResponse(dest, status_code=303)
-    resp.set_cookie(sess.COOKIE, sess.make(user.id, token_version=user.token_version), httponly=True,
+    try:
+        proof = await auth_use_cases.confirm_invite_signin(t)
+    except auth_use_cases.InviteSigninError as exc:
+        if exc.kind == "expired":
+            return RedirectResponse("/?invite_expired=1", status_code=303)
+        if exc.kind == "machine_identity":
+            raise HTTPException(status_code=403, detail="this address cannot be used to sign in") from exc
+        if exc.kind == "suspended":
+            return _auth_page("Account suspended", "This account has been suspended.", ok=False, status=403)
+        raise
+    resp = RedirectResponse(proof.destination, status_code=303)
+    resp.set_cookie(sess.COOKIE, proof.session_cookie, httponly=True,
                     samesite="lax", secure=_is_https(request), max_age=sess.TTL_SECONDS)
     return resp

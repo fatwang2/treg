@@ -86,12 +86,12 @@ normalizes through the referrals subsystem. The shared `_same_origin` CSRF check
 `routers.auth_helpers`, so cookie-authenticated mutations can reuse it without a router importing the
 legacy API module.
 
-The email OTP endpoints are thin HTTP shells over `application.auth.start_email_login` and
-`verify_email_login`. The application use case opens its own session and is the only layer that commits
-OTP rate, attempt, consumption, and user-provisioning state. It returns framework-neutral results or an
-`EmailAuthError`; `routers.auth` alone maps those refusals to the existing HTTP status/detail pairs and
-sets the browser cookie. Shared first-proof provisioning lives in `application.signup.find_or_create_user`
-so later identity doors reuse one command rather than copying its query and uniqueness-race handling.
+The email OTP endpoints call `application.auth.start_email_login` and `verify_email_login`; invite sign-in
+calls `invite_signin_landing` and `confirm_invite_signin`. These application use cases open their sessions
+and own every commit, including OTP rate, attempt, consumption, user provisioning, and invite-token
+consumption. They return framework-neutral results or semantic errors; `routers.auth` alone maps those
+outcomes to the existing HTTP responses and sets browser cookies. Shared first-proof provisioning lives
+in `application.signup.find_or_create_user` so every identity door reuses the same command.
 
 The CLI pairing endpoints, team picker, and `/login` presentation live in a second ordered router
 block in `routers.auth`. Their state machine lives in `application.auth`: start prunes and creates the

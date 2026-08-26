@@ -24,7 +24,8 @@ from ..domain.identity.access import (
     _user_from_identity_token,
     _user_from_session,
 )
-from ..models import Membership, Org, Tool, User
+from ..models import Invite, Membership, Org, Tool, User
+from ..timeutil import as_naive as _as_naive
 from ..timeutil import utcnow_naive as _utcnow_naive
 from . import signup
 
@@ -92,6 +93,14 @@ class IdentityLookupError(Exception):
     """The presented browser or token identity did not resolve to an active user."""
 
 
+class InviteSigninError(Exception):
+    """A framework-neutral invite sign-in refusal translated by the HTTP router."""
+
+    def __init__(self, kind: str):
+        self.kind = kind
+        super().__init__(kind)
+
+
 @dataclass(frozen=True)
 class VerifiedEmail:
     token: str
@@ -120,6 +129,26 @@ class CurrentIdentity:
     org_id: int | None = None
     org: str | None = None
     role: str | None = None
+
+
+@dataclass(frozen=True)
+class InviteEmailConfirmation:
+    email: str
+    org_name: str
+    invited_by: str
+    role: str
+    switch_email: str | None
+
+
+@dataclass(frozen=True)
+class InviteCodePrefill:
+    email: str
+
+
+@dataclass(frozen=True)
+class InviteSigninProof:
+    destination: str
+    session_cookie: str
 
 
 async def start_email_login(email: str, client_ip: str) -> dict:
@@ -426,4 +455,79 @@ async def current_identity(x_treg_token: str, session_cookie: str) -> CurrentIde
             org_id=org_id,
             org=org_slug,
             role=role,
+        )
+
+
+async def _live_invite_by_email_token(db: AsyncSession, t: str) -> Invite | None:
+    """Resolve an emailed invite-link token to a live invite: pending, unexpired, unconsumed
+    (email_token_hash is nulled on first use), and not pointing at a platform-locked org."""
+    t = (t or "").strip()
+    if not t:
+        return None
+    invite = (await db.execute(select(Invite).where(Invite.email_token_hash == crypto.hash_token(t)))
+              ).scalar_one_or_none()
+    if (invite is None or invite.status != "pending"
+            or (invite.expires_at is not None and _as_naive(invite.expires_at) < _utcnow_naive())):
+        return None
+    org = await db.get(Org, invite.org_id)
+    if org is None or org.suspended:
+        return None
+    return invite
+
+
+async def invite_signin_landing(
+    email_token: str, code: str, session_cookie: str,
+) -> InviteEmailConfirmation | InviteCodePrefill:
+    async with database.session_maker() as db:
+        if email_token:
+            invite = await _live_invite_by_email_token(db, email_token)
+            if invite is None:
+                raise InviteSigninError("expired")
+            org = await db.get(Org, invite.org_id)
+            switch_email = None
+            uid = sess.read(session_cookie)
+            if uid is not None:
+                current = await db.get(User, uid)
+                if current is not None and current.email != invite.email:
+                    switch_email = current.email
+            return InviteEmailConfirmation(
+                email=invite.email,
+                org_name=org.name if org else "the team",
+                invited_by=invite.invited_by or "A teammate",
+                role=invite.role,
+                switch_email=switch_email,
+            )
+        code = (code or "").strip()
+        invite = (await db.execute(select(Invite).where(Invite.code_hash == crypto.hash_token(code)))
+                  ).scalar_one_or_none() if code else None
+        if (invite is None or invite.status != "pending"
+                or (invite.expires_at is not None and _as_naive(invite.expires_at) < _utcnow_naive())):
+            raise InviteSigninError("expired")
+        return InviteCodePrefill(email=invite.email)
+
+
+async def confirm_invite_signin(email_token: str) -> InviteSigninProof:
+    async with database.session_maker() as db:
+        invite = await _live_invite_by_email_token(db, email_token)
+        if invite is None:  # consumed / expired / revoked / suspended org → the SPA's expired banner
+            raise InviteSigninError("expired")
+        try:
+            user = await signup.find_or_create_user(db, invite.email)  # first click = registration (user only, no auto org)
+        except signup.MachineIdentityError as exc:
+            raise InviteSigninError("machine_identity") from exc
+        if user is None or user.suspended:  # a banned account may hold the link but must not get a session
+            raise InviteSigninError("suspended")
+        invite.email_token_hash = None  # consume: one sign-in per emailed link
+        db.add(invite)
+        await db.commit()
+        # A share-born invite lands on the shared page itself (the SPA auto-accepts + switches org);
+        # a plain invite lands on the dashboard with the accept banner, as before. `landing` was
+        # allowlist-validated at create time, so this can never redirect off-app.
+        destination = (
+            f"{invite.landing}?invite_org={invite.org_id}"
+            if invite.landing else f"/?invite_org={invite.org_id}"
+        )
+        return InviteSigninProof(
+            destination=destination,
+            session_cookie=sess.make(user.id, token_version=user.token_version),
         )
