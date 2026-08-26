@@ -92,11 +92,19 @@ OTP rate, attempt, consumption, and user-provisioning state. It returns framewor
 sets the browser cookie. Shared first-proof provisioning lives in `application.signup.find_or_create_user`
 so later identity doors reuse one command rather than copying its query and uniqueness-race handling.
 
-The CLI pairing state, start/poll/approve endpoints, team picker, and `/login` presentation live in a
-second ordered router block in `routers.auth`. `api.py` attaches it at the original point after the
-GitHub and Google callbacks, preserving the route snapshot. During the staged social-login move,
-`api.py` binds its existing shared `_auth_page` helper into that router; the next auth journey removes
-this temporary composition seam when the shared presentation helper moves with its other callers.
+The CLI pairing endpoints, team picker, and `/login` presentation live in a second ordered router
+block in `routers.auth`. Their state machine lives in `application.auth`: start prunes and creates the
+pending entry, poll pops a completed result exactly once, and approve preserves the session lookup,
+attempt decrement, pending pop, and result publication order. The application use case also opens the
+read-only sessions used for team selection and approval; it performs no database writes or commits.
+The three short-lived process-local dictionaries live with that state machine rather than at the HTTP
+boundary. Router and API compatibility aliases reference the same dictionary objects, so social-login
+callbacks and existing tests cannot split handshake state through a copy or rebind.
+
+`api.py` attaches the router at the original point after the GitHub and Google callbacks, preserving
+the route snapshot. During the staged social-login move, `api.py` binds its existing shared
+`_auth_page` helper into that router; the next auth journey removes this temporary composition seam
+when the shared presentation helper moves with its other callers.
 
 ## Endpoints
 - **Users / orgs:** `register_user` (`POST /users`, open, legacy — used by the test fixture) creates the

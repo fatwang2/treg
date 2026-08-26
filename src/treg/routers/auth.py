@@ -2,23 +2,20 @@
 
 from __future__ import annotations
 
-import hmac
 import re
-import secrets as _secrets
-from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Request
+from fastapi import APIRouter, Cookie, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
-from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
 
 from ..application import auth as auth_use_cases
 from ..application import signup
 from ..application.auth import (
+    CLI_APPROVE_MAX_TRIES,
     CLI_TOKEN_TTL,
     EMAIL_CODE_TTL,
+    HANDSHAKE_TTL,
     MAX_OTP_ATTEMPTS,
     OTP_NS,
     OTP_START_MAX_PER_EMAIL,
@@ -27,11 +24,8 @@ from ..application.auth import (
     OTP_START_WINDOW_S,
 )
 from ..config import get_settings
-from ..db import get_session
 from ..domain.identity import session as sess
-from ..domain.identity.access import _resolve_org, _user_from_session
-from ..models import Membership, Org, Tool, User
-from ..timeutil import utcnow_naive as _utcnow_naive
+from ..models import User
 from .auth_helpers import _is_https, _same_origin
 
 
@@ -122,29 +116,15 @@ def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "?"
 
 
-# In-memory handshake state for `treg login` (single-instance; short-lived, fine to lose on restart).
-# Both carry a created-at so abandoned handshakes (unauthenticated, attacker-chosen keys) are swept
-# rather than accumulating forever — the results map holds live 30-day tokens, so it must not leak.
-_cli_states: dict[str, tuple[str, datetime]] = {}   # oauth state -> (login_id, created_at)
-_cli_results: dict[str, tuple[dict, datetime]] = {}  # login_id -> (result, created_at) — a completed login
-# login_id -> (pairing_code, attempts_left, created_at). Created by POST /auth/cli/start; the browser must
-# echo the code back at approve time (validated server-side) before a token is issued. This is the phishing
-# guard: a login the user didn't start has no matching code, and the poll endpoint carries no code to
-# brute-force. The code is shown ONLY in the terminal, never in the /login URL.
-_cli_pending: dict[str, tuple[str, int, datetime]] = {}
-HANDSHAKE_TTL = 600                  # seconds an abandoned login handshake lingers before eviction
-CLI_APPROVE_MAX_TRIES = 8           # wrong pairing-code attempts before a pending login is discarded
-_PAIR_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # unambiguous (no O/0/I/1); matches the CLI's charset
-
-
-def _prune_handshakes() -> None:
-    cutoff = _utcnow_naive() - timedelta(seconds=HANDSHAKE_TTL)
-    for k in [k for k, (_, t) in _cli_states.items() if t < cutoff]:
-        _cli_states.pop(k, None)
-    for k in [k for k, (_, t) in _cli_results.items() if t < cutoff]:
-        _cli_results.pop(k, None)
-    for k in [k for k, (_, _, t) in _cli_pending.items() if t < cutoff]:
-        _cli_pending.pop(k, None)
+# The pairing state machine belongs to the application use case. These aliases keep the staged
+# api.py compatibility exports and the social-login handshake on the exact same mutable objects.
+_cli_states = auth_use_cases._cli_states
+_cli_results = auth_use_cases._cli_results
+_cli_pending = auth_use_cases._cli_pending
+_PAIR_ALPHABET = auth_use_cases._PAIR_ALPHABET
+_prune_handshakes = auth_use_cases._prune_handshakes
+_norm_pair_code = auth_use_cases._norm_pair_code
+_orgs_brief = auth_use_cases._orgs_brief
 
 
 _AUTH_HEAD = (
@@ -183,12 +163,6 @@ app = APIRouter()
 cli_router = app
 
 
-def _norm_pair_code(code: str | None) -> str:
-    """Normalise a login pairing code for comparison: strip, uppercase, drop separators/whitespace so
-    `7f3k`, `7F3K`, ` 7F3K ` all match. Empty stays empty (an empty code never matches)."""
-    return "".join((code or "").split()).replace("-", "").upper()
-
-
 @app.post("/auth/cli/start")
 async def auth_cli_start() -> dict:
     """`treg login` calls this FIRST. The SERVER mints both the login_id and a short pairing code and
@@ -196,11 +170,7 @@ async def auth_cli_start() -> dict:
     back at approve time, where it's validated server-side, before any token is issued. So a login the
     user didn't start (a phished /login?cli=<id> link) can't be completed, and the poll endpoint carries
     no code to brute-force. Unauthenticated — on its own it grants nothing."""
-    _prune_handshakes()
-    login_id = _secrets.token_urlsafe(18)
-    code = "".join(_secrets.choice(_PAIR_ALPHABET) for _ in range(4))
-    _cli_pending[login_id] = (code, CLI_APPROVE_MAX_TRIES, _utcnow_naive())
-    return {"login_id": login_id, "code": code}
+    return await auth_use_cases.start_cli_login()
 
 
 @app.get("/auth/cli/poll")
@@ -208,9 +178,7 @@ async def auth_cli_poll(login_id: str = "") -> dict:
     """The CLI polls this after opening the browser; returns the identity token once, then forgets it.
     A token only lands here after auth_cli_approve validated the terminal pairing code, so a login the
     user didn't approve never yields one — there is nothing here to brute-force (no code parameter)."""
-    _prune_handshakes()  # sweep abandoned results (they hold live tokens) so the map can't leak
-    entry = _cli_results.pop(login_id, None)
-    return entry[0] if entry is not None else {"status": "pending"}
+    return await auth_use_cases.poll_cli_login(login_id)
 
 
 # `treg login` mints the login_id with token_urlsafe(18) (24 chars); anything outside this shape is
@@ -224,44 +192,31 @@ class CliApproveIn(BaseModel):
     org: str | None = None  # the team slug the user picked in the /login org picker (optional)
 
 
-async def _orgs_brief(user: User, db: AsyncSession) -> list[dict]:
-    """The user's teams for the /login picker: slug, name, role, tool_count, personal. Sorted so the
-    team a CLI login should default to sits first (a real team over the personal org, then most tools).
-    `personal` mirrors the dashboard's rule: the auto-created org named after the user's email."""
-    memberships = (await db.execute(
-        select(Membership).where(Membership.user_id == user.id))).scalars().all()
-    org_ids = [m.org_id for m in memberships]
-    if not org_ids:
-        return []
-    orgs = {o.id: o for o in (await db.execute(
-        select(Org).where(Org.id.in_(org_ids)))).scalars().all()}
-    counts = dict((await db.execute(
-        select(Tool.org_id, func.count(Tool.id)).where(Tool.org_id.in_(org_ids)).group_by(Tool.org_id))).all())
-    out = []
-    for m in memberships:
-        o = orgs.get(m.org_id)
-        if o is None:
-            continue
-        out.append({"slug": o.slug, "name": o.name, "role": m.role,
-                    "tool_count": counts.get(o.id, 0), "personal": o.name == user.email})
-    out.sort(key=lambda r: (r["personal"], -r["tool_count"], r["name"].lower()))
-    return out
-
-
 @app.get("/auth/cli/orgs")
-async def auth_cli_orgs(treg_session: str = Cookie(default=""), db: AsyncSession = Depends(get_session)) -> dict:
+async def auth_cli_orgs(treg_session: str = Cookie(default="")) -> dict:
     """The /login page fetches this (session-cookie authed) to render the team picker before completing
     a `treg login` handshake. Returns the signed-in user's teams; empty list if no session."""
-    user = await _user_from_session(treg_session, db)
-    if user is None:
-        return {"email": None, "orgs": []}
-    return {"email": user.email, "orgs": await _orgs_brief(user, db)}
+    return await auth_use_cases.cli_orgs(treg_session)
+
+
+_CLI_HTTP_ERRORS = {
+    "no_session": (401, "no session"),
+    "expired": (400, "this login has expired — run `treg login` again"),
+    "too_many_wrong_codes": (400, "too many wrong codes — run `treg login` again"),
+    "wrong_code": (400, "that code doesn't match the one in your terminal"),
+    "not_member": (403, "not a member of that team"),
+}
+
+
+def _cli_http_error(exc: auth_use_cases.CliPairingError) -> HTTPException:
+    status_code, detail = _CLI_HTTP_ERRORS[exc.kind]
+    return HTTPException(status_code=status_code, detail=detail)
 
 
 @app.post("/auth/cli/approve")
 async def auth_cli_approve(
     request: Request, body: CliApproveIn,
-    treg_session: str = Cookie(default=""), db: AsyncSession = Depends(get_session),
+    treg_session: str = Cookie(default=""),
 ) -> dict:
     """Complete a `treg login` handshake from an EXISTING browser session (the "Continue as" button
     on /login, and the email door after /auth/email/verify sets the cookie). Deliberately a POST with
@@ -275,42 +230,16 @@ async def auth_cli_approve(
         raise HTTPException(status_code=403, detail="cross-origin approve rejected")
     if not _LOGIN_ID_RE.fullmatch(body.login_id or ""):
         raise HTTPException(status_code=400, detail="bad login_id")
-    user = await _user_from_session(treg_session, db)
-    if user is None:
-        raise HTTPException(status_code=401, detail="no session")
-    # The pairing code proves the approver is the same person who ran `treg login` (the code is shown only
-    # in that terminal, via POST /auth/cli/start). Validate it HERE — where we have a session + a same-
-    # origin check — so a phished /login?cli=<attacker_id> link (whose code the victim doesn't have) can
-    # never complete, a mistyped code fails immediately in the browser, and the poll endpoint stays codeless.
-    pending = _cli_pending.get(body.login_id)
-    if pending is None:
-        raise HTTPException(status_code=400, detail="this login has expired — run `treg login` again")
-    expected, tries_left, started_at = pending
-    typed = _norm_pair_code(body.code)
-    if not typed or not hmac.compare_digest(expected.encode(), typed.encode()):
-        if tries_left <= 1:  # out of attempts → discard the pending login so the code can't be ground down
-            _cli_pending.pop(body.login_id, None)
-            raise HTTPException(status_code=400, detail="too many wrong codes — run `treg login` again")
-        _cli_pending[body.login_id] = (expected, tries_left - 1, started_at)
-        raise HTTPException(status_code=400, detail="that code doesn't match the one in your terminal")
-    active_org: str | None = None
-    if body.org:
-        org = await _resolve_org(body.org, db)
-        m = (await db.execute(select(Membership).where(
-            Membership.user_id == user.id, Membership.org_id == org.id))).scalar_one_or_none() if org else None
-        if org is None or m is None:
-            raise HTTPException(status_code=403, detail="not a member of that team")
-        active_org = org.slug
-    _cli_pending.pop(body.login_id, None)  # code matched → consume the pending login
-    result = {"token": sess.make(user.id, CLI_TOKEN_TTL, user.token_version), "email": user.email}
-    if active_org:
-        result["active_org"] = active_org
-    _cli_results[body.login_id] = (result, _utcnow_naive())
-    return {"ok": True, "email": user.email, "active_org": active_org}
+    try:
+        return await auth_use_cases.approve_cli_login(
+            treg_session, body.login_id, body.code, body.org,
+        )
+    except auth_use_cases.CliPairingError as exc:
+        raise _cli_http_error(exc) from exc
 
 
 @app.get("/login", include_in_schema=False)
-async def login_page(cli: str = "", treg_session: str = Cookie(default=""), db: AsyncSession = Depends(get_session)):
+async def login_page(cli: str = "", treg_session: str = Cookie(default="")):
     """The universal sign-in page `treg login` opens: reuses an existing dashboard session with one
     click ("Continue as …"), else offers every configured door — GitHub, Google, email one-time code.
     The email door is always present, so login works even with no OAuth app configured."""
@@ -319,9 +248,9 @@ async def login_page(cli: str = "", treg_session: str = Cookie(default=""), db: 
     if not _LOGIN_ID_RE.fullmatch(cli):
         return _auth_page("Login failed", "Bad login link. Run <code>treg login</code> again.", ok=False, status=400)
     s = get_settings()
-    user = await _user_from_session(treg_session, db)
+    session_email = await auth_use_cases.cli_session_email(treg_session)
     return HTMLResponse(_login_page_html(
-        cli, session_email=user.email if user else None,
+        cli, session_email=session_email,
         github=bool(s.github_client_id), google=bool(s.google_client_id)))
 
 
