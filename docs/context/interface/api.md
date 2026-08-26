@@ -556,7 +556,7 @@ helpers `_secret_view` / `_tool_view` / `_bundle_view` never leak secret values 
 surfaced by `GET /tools` / `/bundles/{id}`).
 
 ## Cross-cutting hardening (bug-hunt)
-- **Legacy-host redirect:** `_legacy_host_redirect` 301s GET/HEAD marketing pages (`_REDIRECT_PATHS`)
+- **Legacy-host redirect:** `_LegacyHostRedirectMiddleware` 301s GET/HEAD marketing pages (`_REDIRECT_PATHS`)
   from the legacy hosts (`config.LEGACY_PUBLIC_HOSTS`) to the canonical `public_url` host (`treg.to`)
   — but only for **anonymous** visitors: a `treg_session` cookie is host-scoped, so a signed-in
   browser (e.g. the invite flow landing on `/?invite_org=…`) is served in place. The auth entries
@@ -570,7 +570,7 @@ surfaced by `GET /tools` / `/bundles/{id}`).
   transport allow-lists (`mcp._allowed_hosts`/`_allowed_origins`) and in the OAuth token-audience
   set (`mcp_oauth.mcp_resource_audiences()` — pre-move grants keep their old audience for life,
   and refresh reissues it). Never remove the legacy domain from Render.
-- **Security headers:** a `@app.middleware` adds `X-Content-Type-Options: nosniff`, `X-Frame-Options:
+- **Security headers:** pure-ASGI `_SecurityHeadersMiddleware` adds `X-Content-Type-Options: nosniff`, `X-Frame-Options:
   DENY`, `Referrer-Policy: no-referrer`, and HSTS to every response (`setdefault`, so the `/call`
   proxy's stricter CSP/nosniff wins).
 - **No 500 on bad ids/URLs:** an `OverflowError` handler turns an oversized all-digit id into a `404`

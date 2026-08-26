@@ -20,11 +20,29 @@ the Catalog, web, and admin modules define concern-specific `APIRouter` blocks t
 at their legacy registration points. It then calls the factory once at EOF so the deployed and
 documented `treg.api:app` import path remains the default `all` role.
 
-The factory owns concrete assembly: the three middleware registrations, five exception handlers,
+The factory owns concrete assembly: the three pure-ASGI middleware registrations, five exception handlers,
 static mounts, optional MCP mount and lifespan, GET-to-HEAD widening, the OpenAPI wrapper that hides
 implied HEAD operations, shared HTTP client creation, startup work, shutdown drains, and the Ads
 conversion worker. Registration order is compatibility behavior. The four stage-0 snapshots stay
-byte-identical for `role="all"`.
+byte-identical for `role="all"` unless that composition intentionally changes.
+
+The middleware stack is `_BodyDecodeMiddleware` -> `_SecurityHeadersMiddleware` ->
+`_LegacyHostRedirectMiddleware` -> routes/mounts. All three are pure ASGI. The security wrapper adds
+headers at `http.response.start` with case-insensitive setdefault semantics, and the redirect wrapper
+either sends the same 301/302 response as before or calls its child directly. Keeping
+`BaseHTTPMiddleware.call_next()` out of this stack matters for streaming and disconnects: an MCP
+client may close while its stateless transport terminates without sending a response, which is a
+normal end to an already-dead connection rather than a server 500.
+
+Pure ASGI does not make a genuine missing-response defect silent. Uvicorn's
+`RequestResponseCycle.run_asgi` checks an app that returns while the connection is still live, logs
+`ASGI callable returned without starting response.`, and sends a 500. It skips that error only when
+the protocol has already marked the client disconnected, when no response can be delivered. Response
+completion also remains responsible for Starlette background tasks: the `/call` relay's
+`StreamingResponse` runs `BackgroundTask(upstream_resp.aclose)` after its body, and an assertion test
+pins that the shared httpx connection is released exactly once. Removing the two AnyIO memory-stream
+hops changes streaming backpressure and scheduling but not interruption semantics, which the
+callmatrix stream-failure case pins.
 
 ## Role manifests
 

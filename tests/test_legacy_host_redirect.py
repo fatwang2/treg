@@ -45,6 +45,12 @@ async def test_query_string_survives_the_redirect(raw_client):
     assert r.headers["location"] == "https://treg.to/?utm_source=x"
 
 
+async def test_head_uses_the_same_redirect_contract(raw_client):
+    r = await raw_client.head("/support?from=head", headers=LEGACY)
+    assert r.status_code == 301
+    assert r.headers["location"] == "https://treg.to/support?from=head"
+
+
 async def test_a_session_holder_is_never_bounced_off_their_cookies(raw_client):
     # The invite flow sets a legacy-host session then lands on `/?invite_org=…` — a redirect here
     # would strand the browser on the canonical host without the session it just minted.

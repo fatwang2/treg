@@ -437,8 +437,8 @@ def create_app(role: AppRole = "all") -> FastAPI:
     )
 
     # Registration order is part of the compatibility surface. add_middleware prepends entries.
-    app.middleware("http")(api_module._legacy_host_redirect)
-    app.middleware("http")(api_module._security_headers)
+    app.add_middleware(api_module._LegacyHostRedirectMiddleware)
+    app.add_middleware(api_module._SecurityHeadersMiddleware)
     app.add_middleware(api_module._BodyDecodeMiddleware)
     app.add_exception_handler(OverflowError, api_module._id_out_of_range)
     app.add_exception_handler(PoolTimeoutError, api_module._pool_saturated)

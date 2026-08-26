@@ -29,17 +29,13 @@
     },
     {
       "args": [],
-      "class": "starlette.middleware.base.BaseHTTPMiddleware",
-      "kwargs": {
-        "dispatch": "treg.api._security_headers"
-      }
+      "class": "treg.api._SecurityHeadersMiddleware",
+      "kwargs": {}
     },
     {
       "args": [],
-      "class": "starlette.middleware.base.BaseHTTPMiddleware",
-      "kwargs": {
-        "dispatch": "treg.api._legacy_host_redirect"
-      }
+      "class": "treg.api._LegacyHostRedirectMiddleware",
+      "kwargs": {}
     }
   ]
 }
