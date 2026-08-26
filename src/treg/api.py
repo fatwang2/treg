@@ -67,12 +67,14 @@ from .domain.identity.access import (
     AGENT_DOMAIN,
     PUBLIC_DEMO_DOMAIN,
     Caller,
+    _can_manage,
     _is_agent_email,
     _is_machine_email,
     _membership_by_token,
     _norm_email,
     _resolve_org,
     _role_at_least,
+    _require_can_register,
     _user_from_identity_token,
     _user_from_session,
     require_identity,
@@ -291,6 +293,19 @@ from .routers.orgs import (
     set_tag_budget,
     set_tag_default,
     usage_by_tag,
+)
+from .routers import resources as resources_routes
+from .routers.resources import (
+    SecretIn,
+    SecretUpdate,
+    _require_not_live_demo_secret,
+    _secret_view,
+    _validate_bundle_id,
+    _visible_secret_ids,
+    create_secret,
+    delete_secret,
+    list_secrets,
+    update_secret,
 )
 from .routers.auth_helpers import (
     OAUTH_RETURN_COOKIE,
@@ -794,17 +809,6 @@ router.routes.extend(auth_routes.token_router.routes)
 
 
 
-def _can_manage(caller: Caller, resource) -> bool:
-    """Admin/owner may manage any resource in the org; a member only what they created."""
-    return _role_at_least(caller.role, "admin") or resource.owner == caller.email
-
-
-def _require_can_register(caller: Caller) -> None:
-    """Registering (secrets/tools/skills/oauth) needs member+. A viewer may only call + read."""
-    if not _role_at_least(caller.role, "member"):
-        raise HTTPException(status_code=403, detail="viewers can call and read, but cannot register")
-
-
 def _tool_allowed(caller: Caller, tool_name: str) -> bool:
     """Per-member tool ACL: allowed if the member's `tool_access` is unset (NULL = ALL tools) or names
     this tool. The OWNER is never restricted (the org's authority); admins/members can be."""
@@ -857,22 +861,6 @@ def _require_tool_use(caller: Caller, tool: Tool) -> None:
 
 
 
-async def _visible_secret_ids(caller: Caller, db: AsyncSession) -> set[int] | None:
-    """The secret ids a tool-restricted member may SEE: the ones wired into their allowed tools
-    (HTTP bindings + cli.inject). None = unrestricted (owner / NULL tool_access) — show all. The
-    ACL isn't just a call gate: listings must not reveal credentials the member can't use."""
-    if caller.role == "owner" or caller.membership.tool_access is None:
-        return None
-    tools = (await db.execute(select(Tool).where(Tool.org_id == caller.org_id))).scalars().all()
-    ids: set[int] = set()
-    for t in tools:
-        if not _tool_usable(caller, t):
-            continue
-        ids |= {b.get("secret_id") for b in (t.bindings or []) if b.get("secret_id") is not None}
-        ids |= {e.get("secret_id") for e in ((t.cli or {}).get("inject") or []) if e.get("secret_id") is not None}
-    return ids
-
-
 def _require_local_run(caller: Caller) -> None:
     """Gate the LOCAL run tier on the member's `local_run_enabled` (owner exempt). Off → server only."""
     if caller.role != "owner" and not caller.membership.local_run_enabled:
@@ -886,19 +874,6 @@ def _require_local_run(caller: Caller) -> None:
 
 
 
-
-
-class SecretIn(BaseModel):
-    name: str
-    value: str
-    kind: str = "env"
-    bundle_id: int | None = None
-
-
-class SecretUpdate(BaseModel):
-    name: str | None = None
-    value: str | None = None
-    kind: str | None = None
 
 
 class ToolIn(BaseModel):
@@ -1681,92 +1656,9 @@ async def clear_capability_pin(
 router.routes.extend(org_routes.policy_router.routes)
 
 
-# ---- secrets (values are write-only — never returned) -------------------------------------
-@app.post("/secrets")
-async def create_secret(
-    body: SecretIn, caller: Caller = Depends(require_member), db: AsyncSession = Depends(get_session)
-) -> dict:
-    _require_can_register(caller)
-    await _enforce_sandbox_cap(caller, Secret, demo_sandbox.MAX_SECRETS, "secrets", db)
-    await _validate_bundle_id(body.bundle_id, caller.org_id, db)
-    secret = Secret(
-        org_id=caller.org_id, name=body.name, owner=caller.email, kind=body.kind,
-        value=crypto.encrypt(body.value), bundle_id=body.bundle_id,
-    )
-    db.add(secret)
-    await db.commit()
-    return _secret_view(secret)
-
-
-@app.get("/secrets")
-async def list_secrets(
-    caller: Caller = Depends(require_member), db: AsyncSession = Depends(get_session)
-) -> list[dict]:
-    rows = (await db.execute(select(Secret).where(Secret.org_id == caller.org_id))).scalars().all()
-    visible = await _visible_secret_ids(caller, db)
-    if visible is not None:  # tool-restricted member: only the keys wired into their allowed tools
-        rows = [s for s in rows if s.id in visible]
-    return [_secret_view(s) for s in rows]
-
-
-@app.patch("/secrets/{secret_id}")
-async def update_secret(
-    secret_id: int,
-    body: SecretUpdate,
-    caller: Caller = Depends(require_member),
-    db: AsyncSession = Depends(get_session),
-) -> dict:
-    secret = await db.get(Secret, secret_id)
-    if secret is None or secret.org_id != caller.org_id:
-        raise HTTPException(status_code=404, detail="secret not found")
-    if not _can_manage(caller, secret):
-        raise HTTPException(status_code=403, detail="only the creator or an admin can edit this secret")
-    _require_not_live_demo_secret(caller, secret)
-    fields = body.model_dump(exclude_unset=True)
-    for k in ("name", "value", "kind"):  # these map to NOT-NULL columns; explicit null is a 422, not a 500
-        if k in fields and fields[k] is None:
-            raise HTTPException(status_code=422, detail=f"{k} cannot be null")
-    # A kind change drives refresh + health + extraction shape; validate a JSON-kind actually has a
-    # JSON value (else the tool silently 502s later) and reset the now-meaningless health verdict.
-    if "kind" in fields and fields["kind"] != secret.kind:
-        if fields["kind"] in ("oauth", "secret_file"):
-            raw = fields["value"] if "value" in fields else crypto.decrypt(secret.value)
-            try:
-                json.loads(raw)
-            except (ValueError, TypeError):
-                raise HTTPException(status_code=422, detail=f"kind {fields['kind']!r} needs a JSON value")
-        secret.health_status, secret.health_detail, secret.health_checked_at = "unknown", "", None
-    if "value" in fields:
-        fields["value"] = crypto.encrypt(fields["value"])  # re-encrypt on rotate
-        # The value is exactly what health measures — a rotation invalidates the prior verdict.
-        secret.health_status, secret.health_detail, secret.health_checked_at = "unknown", "", None
-    for k, v in fields.items():
-        setattr(secret, k, v)
-    await db.commit()
-    return _secret_view(secret)
-
-
-@app.delete("/secrets/{secret_id}")
-async def delete_secret(
-    secret_id: int, caller: Caller = Depends(require_member), db: AsyncSession = Depends(get_session)
-) -> dict:
-    secret = await db.get(Secret, secret_id)
-    if secret is None or secret.org_id != caller.org_id:
-        raise HTTPException(status_code=404, detail="secret not found")
-    if not _can_manage(caller, secret):
-        raise HTTPException(status_code=403, detail="only the creator or an admin can delete this secret")
-    _require_not_live_demo_secret(caller, secret)
-    # bindings live in a JSON column — scan tools IN THIS ORG (registry-scale N is small).
-    tools = (await db.execute(select(Tool).where(Tool.org_id == caller.org_id))).scalars().all()
-    if any(b.get("secret_id") == secret_id for t in tools for b in t.bindings):
-        raise HTTPException(status_code=409, detail="secret is referenced by a tool binding")
-    # a secret used only by a local-run inject (not an HTTP binding) would otherwise be silently
-    # deletable, breaking `treg run` — guard those references too.
-    if any((e.get("secret_id") == secret_id) for t in tools for e in ((t.cli or {}).get("inject") or [])):
-        raise HTTPException(status_code=409, detail="secret is referenced by a tool's local-run (cli) profile")
-    await db.delete(secret)
-    await db.commit()
-    return {"deleted": secret_id}
+resources_routes._tool_usable = _tool_usable
+resources_routes._enforce_sandbox_cap = _enforce_sandbox_cap
+router.routes.extend(resources_routes.crud_router.routes)
 
 
 def _require_not_live_demo_tool(caller: Caller, tool: Tool) -> None:
@@ -1780,14 +1672,6 @@ def _require_not_live_demo_tool(caller: Caller, tool: Tool) -> None:
             "the live stripe demo endpoint is part of the sandbox — add your own endpoints instead"))
 
 
-def _require_not_live_demo_secret(caller: Caller, secret: Secret) -> None:
-    """Companion guard for the seeded STRIPE_KEY the live tool is bound to."""
-    if (demo_sandbox.is_sandbox(caller.org) and get_settings().demo_stripe_key
-            and secret.name == "STRIPE_KEY"):
-        raise HTTPException(status_code=403, detail=(
-            "STRIPE_KEY powers the live stripe demo — add your own keys instead"))
-
-
 # ---- tools --------------------------------------------------------------------------------
 def _require_public_base_url(base_url: str) -> None:
     """A tool's base_url is fetched server-side by the proxy — reject internal / loopback / cloud-metadata
@@ -1797,16 +1681,6 @@ def _require_public_base_url(base_url: str) -> None:
         raise HTTPException(status_code=422, detail=(
             "base_url must be a public http(s) address — loopback, private, link-local, and cloud-"
             "metadata hosts are refused"))
-
-
-async def _validate_bundle_id(bundle_id: int | None, org_id: int, db: AsyncSession) -> None:
-    """A resource may only attach to a bundle in its OWN org — else it'd be counted by, rendered in,
-    and swept up by a foreign org's bundle view/delete (org-scoping leak)."""
-    if bundle_id is None:
-        return
-    bundle = await db.get(Bundle, bundle_id)
-    if bundle is None or bundle.org_id != org_id:
-        raise HTTPException(status_code=422, detail=f"bundle_id {bundle_id} not found in this org")
 
 
 async def _require_secret_ownership(secret: Secret, caller: Caller) -> None:
@@ -6207,10 +6081,6 @@ async def run_tool_server(
 
 
 # ---- view helpers (never leak secret values) ----------------------------------------------
-def _secret_view(s: Secret) -> dict:
-    return {"id": s.id, "name": s.name, "kind": s.kind, "owner": s.owner, "bundle_id": s.bundle_id}
-
-
 def _tool_view(t: Tool) -> dict:
     return {
         "id": t.id,

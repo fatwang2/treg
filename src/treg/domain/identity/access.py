@@ -195,6 +195,17 @@ def _role_at_least(role: str, minimum: str) -> bool:
     return ROLE_RANK.get(role, -1) >= ROLE_RANK.get(minimum, 99)
 
 
+def _can_manage(caller: Caller, resource) -> bool:
+    """Admin/owner may manage any resource in the org; a member only what they created."""
+    return _role_at_least(caller.role, "admin") or resource.owner == caller.email
+
+
+def _require_can_register(caller: Caller) -> None:
+    """Registering (secrets/tools/skills/oauth) needs member+. A viewer may only call + read."""
+    if not _role_at_least(caller.role, "member"):
+        raise HTTPException(status_code=403, detail="viewers can call and read, but cannot register")
+
+
 def _norm_email(email: str) -> str:
     """Canonical email identity: trimmed + lowercased. One human = one identity regardless of the
     case they type. Applied at every identity door + every invite comparison so `Bob@X.com` and

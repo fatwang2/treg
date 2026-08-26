@@ -7,6 +7,7 @@ sources:
   - src/treg/oauth.py
   - src/treg/oauth_providers.py
   - src/treg/health.py
+  - src/treg/routers/resources.py
 related:
   - architecture/proxy-model.md
   - architecture/data-model.md
