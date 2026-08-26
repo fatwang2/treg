@@ -162,6 +162,7 @@ from .routers.auth import (
     _same_mcp_resource,
     _wrong_resource,
     AUTH_CODE_TTL_S,
+    auth_cli_token,
     auth_cli_approve,
     auth_cli_orgs,
     auth_cli_poll,
@@ -176,6 +177,7 @@ from .routers.auth import (
     auth_invite_signin_confirm,
     auth_logout,
     auth_me,
+    auth_revoke_tokens,
     login_page,
     oauth_authorization_server,
     oauth_authorize,
@@ -683,54 +685,7 @@ router.routes.extend(auth_routes.oauth_server_router.routes)
 router.routes.extend(web_routes.public_docs_router.routes)
 
 # ---- caller auth (token = a Membership; open registration) --------------------------------
-@app.get("/auth/cli-token")
-async def auth_cli_token(
-    user: User = Depends(require_identity),
-    x_treg_org: str = Header(default=""),
-    db: AsyncSession = Depends(get_session),
-) -> dict:
-    """Mint a fresh CLI/bearer token for the authenticated caller (session cookie OR token). Identity
-    tokens are stateless (`sess.make`), so handing one out rotates/invalidates nothing — it just lets
-    the dashboard embed a working token in copy-paste snippets + a 'copy token' button, so a human
-    doesn't have to hunt for it in `~/.treg/config.json`.
-
-    When the caller names a team (the dashboard sends `X-Treg-Org` for the active org, and only after
-    confirming membership), the org slug is BAKED into the token. That is what makes the dashboard's
-    "your API key" work as a bare bearer where no `X-Treg-Org` header can travel — pasted into an MCP
-    server's Authorization it resolves to that team, no header, no per-org agent token to manage. A
-    caller in one team who sends no header still gets a plain token (MCP auto-selects the sole team)."""
-    org_slug = None
-    if x_treg_org:
-        org = await _resolve_org(x_treg_org, db)
-        if org is not None:
-            m = (await db.execute(select(Membership).where(
-                Membership.user_id == user.id, Membership.org_id == org.id))).scalar_one_or_none()
-            if m is not None:               # only pin a team the caller actually belongs to
-                org_slug = org.slug
-    return {"token": sess.make(user.id, CLI_TOKEN_TTL, user.token_version, org=org_slug),
-            "email": user.email, "org": org_slug}
-
-
-@app.post("/auth/revoke-tokens")
-async def auth_revoke_tokens(
-    request: Request,
-    user: User = Depends(require_identity),
-    db: AsyncSession = Depends(get_session),
-) -> JSONResponse:
-    """Kill switch for a leaked token: invalidate every signed identity token (from `treg login`) AND
-    every browser session this user holds, in one step. Bumping user.token_version makes all previously
-    minted tokens (which carry the old tv) mismatch and be rejected. Unlike suspending the account this
-    keeps the user active; unlike rotating TREG_SESSION_SECRET it affects ONLY this user. We then re-issue
-    a fresh session cookie + token for the caller, so the device that pressed the button stays signed in
-    while every other device is signed out. (Org membership tokens from accept-invite are a separate token
-    type and are unaffected — those are revoked by removing the membership.)"""
-    user.token_version += 1  # same db session as require_identity (FastAPI caches the dependency)
-    await db.commit()
-    resp = JSONResponse({"token": sess.make(user.id, CLI_TOKEN_TTL, user.token_version),
-                         "email": user.email, "revoked": True})
-    resp.set_cookie(sess.COOKIE, sess.make(user.id, token_version=user.token_version), httponly=True,
-                    samesite="lax", secure=_is_https(request), max_age=sess.TTL_SECONDS)
-    return resp
+router.routes.extend(auth_routes.token_router.routes)
 
 
 async def _is_last_active_superadmin(db: AsyncSession, target: User) -> bool:

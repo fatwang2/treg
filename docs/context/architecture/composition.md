@@ -19,7 +19,7 @@ related:
 # Application composition
 
 `bootstrap.create_app(role)` is the FastAPI composition root. `api.py` hosts the ordered route table;
-the auth module defines login, session, invite, OAuth-server, and grant-management blocks,
+the auth module defines login, session, invite, user-token, OAuth-server, and grant-management blocks,
 while the Catalog, web, and admin
 modules define their concern-specific `APIRouter` blocks that `api.py`
 appends at their legacy registration points. It then calls the factory once at EOF so the deployed

@@ -10,6 +10,7 @@ from fastapi import APIRouter, Cookie, Depends, Form, Header, HTTPException, Que
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
 
 from ..application import auth as auth_use_cases
 from ..application import signup
@@ -26,11 +27,12 @@ from ..application.auth import (
     OTP_START_WINDOW_S,
 )
 from ..config import PUBLIC_HOST_ALIASES, get_settings
+from ..db import get_session
 from ..domain.identity import mcp_oauth
 from ..domain.identity import session as sess
-from ..domain.identity.access import require_identity
+from ..domain.identity.access import _resolve_org, require_identity
 from ..domain.identity.mcp_oauth import REFRESH_TTL_S
-from ..models import User
+from ..models import Membership, User
 from .auth_helpers import _is_https, _remember_oauth_return, _same_origin
 from .web import _esc_html
 
@@ -1064,3 +1066,58 @@ async def oauth_grant_set_team(family_id: str, body: GrantTeamIn,
         )
     except auth_use_cases.OAuthGrantError as exc:
         raise HTTPException(status_code=404, detail=exc.detail) from exc
+
+
+# The app alias preserves the moved handlers' original @app decorators byte-for-byte.
+app = APIRouter()
+token_router = app
+
+
+@app.get("/auth/cli-token")
+async def auth_cli_token(
+    user: User = Depends(require_identity),
+    x_treg_org: str = Header(default=""),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Mint a fresh CLI/bearer token for the authenticated caller (session cookie OR token). Identity
+    tokens are stateless (`sess.make`), so handing one out rotates/invalidates nothing — it just lets
+    the dashboard embed a working token in copy-paste snippets + a 'copy token' button, so a human
+    doesn't have to hunt for it in `~/.treg/config.json`.
+
+    When the caller names a team (the dashboard sends `X-Treg-Org` for the active org, and only after
+    confirming membership), the org slug is BAKED into the token. That is what makes the dashboard's
+    "your API key" work as a bare bearer where no `X-Treg-Org` header can travel — pasted into an MCP
+    server's Authorization it resolves to that team, no header, no per-org agent token to manage. A
+    caller in one team who sends no header still gets a plain token (MCP auto-selects the sole team)."""
+    org_slug = None
+    if x_treg_org:
+        org = await _resolve_org(x_treg_org, db)
+        if org is not None:
+            m = (await db.execute(select(Membership).where(
+                Membership.user_id == user.id, Membership.org_id == org.id))).scalar_one_or_none()
+            if m is not None:               # only pin a team the caller actually belongs to
+                org_slug = org.slug
+    return {"token": sess.make(user.id, CLI_TOKEN_TTL, user.token_version, org=org_slug),
+            "email": user.email, "org": org_slug}
+
+
+@app.post("/auth/revoke-tokens")
+async def auth_revoke_tokens(
+    request: Request,
+    user: User = Depends(require_identity),
+    db: AsyncSession = Depends(get_session),
+) -> JSONResponse:
+    """Kill switch for a leaked token: invalidate every signed identity token (from `treg login`) AND
+    every browser session this user holds, in one step. Bumping user.token_version makes all previously
+    minted tokens (which carry the old tv) mismatch and be rejected. Unlike suspending the account this
+    keeps the user active; unlike rotating TREG_SESSION_SECRET it affects ONLY this user. We then re-issue
+    a fresh session cookie + token for the caller, so the device that pressed the button stays signed in
+    while every other device is signed out. (Org membership tokens from accept-invite are a separate token
+    type and are unaffected — those are revoked by removing the membership.)"""
+    user.token_version += 1  # same db session as require_identity (FastAPI caches the dependency)
+    await db.commit()
+    resp = JSONResponse({"token": sess.make(user.id, CLI_TOKEN_TTL, user.token_version),
+                         "email": user.email, "revoked": True})
+    resp.set_cookie(sess.COOKIE, sess.make(user.id, token_version=user.token_version), httponly=True,
+                    samesite="lax", secure=_is_https(request), max_age=sess.TTL_SECONDS)
+    return resp
