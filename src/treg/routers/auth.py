@@ -5,14 +5,12 @@ from __future__ import annotations
 import hashlib
 import hmac
 import re
-from urllib.parse import quote
 
-from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Cookie, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .. import crypto
 from ..application import auth as auth_use_cases
 from ..application import signup
 from ..application.auth import (
@@ -28,11 +26,8 @@ from ..application.auth import (
     OTP_START_WINDOW_S,
 )
 from ..config import PUBLIC_HOST_ALIASES, get_settings
-from ..db import get_session
 from ..domain.identity import session as sess
-from ..domain.identity.access import _membership_by_token, _user_from_identity_token, _user_from_session
-from ..models import Org, User
-from ..timeutil import utcnow_naive as _utcnow_naive
+from ..models import User
 from .auth_helpers import _is_https, _same_origin
 
 
@@ -179,21 +174,39 @@ app = APIRouter()
 social_router = app
 
 
+_SOCIAL_HTTP_ERRORS = {
+    "github_not_configured": (503, "GitHub login not configured"),
+    "google_not_configured": (503, "Google login not configured"),
+    "machine_identity": (403, "this address cannot be used to sign in"),
+}
+
+_SOCIAL_PAGE_ERRORS = {
+    "bad_state": ("Login failed", "Bad state. Please start the login again.", False, 400),
+    "github_no_access_token": ("Login failed", "No access token from GitHub.", False, 400),
+    "github_no_verified_email": ("Login failed", "No verified email on your GitHub account.", False, 400),
+    "google_no_access_token": ("Login failed", "No access token from Google.", False, 400),
+    "google_no_email": ("Login failed", "No email on your Google account.", False, 400),
+    "google_unverified_email": ("Login failed", "Your Google email isn't verified.", False, 400),
+    "callback_failed": ("Login failed", "Something went wrong. Please try again.", False, 502),
+    "suspended": ("Account suspended", "This account has been suspended.", False, 403),
+}
+
+
+def _social_http_error(exc: auth_use_cases.SocialLoginError) -> HTTPException:
+    status_code, detail = _SOCIAL_HTTP_ERRORS[exc.kind]
+    return HTTPException(status_code=status_code, detail=detail)
+
+
 # ---- human login via GitHub OAuth (dashboard sessions) ------------------------------------
 @app.get("/auth/github")
 async def auth_github(request: Request, cli: str = ""):
-    s = get_settings()
-    if not s.github_client_id:
-        raise HTTPException(status_code=503, detail="GitHub login not configured")
-    redirect = f"{_login_callback_base(request)}/auth/github/callback"
-    state = crypto.new_token()
-    if cli:  # this is a `treg login` handshake, not a browser session
-        _prune_handshakes()  # evict abandoned handshakes so this map can't grow unbounded
-        _cli_states[state] = (cli, _utcnow_naive())
-    url = (f"{s.github_authorize_url}?client_id={s.github_client_id}"
-           f"&redirect_uri={quote(redirect, safe='')}&scope={quote('read:user user:email')}&state={state}")
-    resp = RedirectResponse(url, status_code=302)
-    resp.set_cookie("treg_oauth_state", state, httponly=True, max_age=600, samesite="lax", secure=_is_https(request))
+    try:
+        started = auth_use_cases.start_github_login(cli, lambda: _login_callback_base(request))
+    except auth_use_cases.SocialLoginError as exc:
+        raise _social_http_error(exc) from exc
+    resp = RedirectResponse(started.url, status_code=302)
+    resp.set_cookie("treg_oauth_state", started.state, httponly=True, max_age=600,
+                    samesite="lax", secure=_is_https(request))
     return resp
 
 
@@ -222,107 +235,54 @@ def _finish_oauth_login(request: Request, user: User, st: tuple | None) -> Redir
     return resp
 
 
+def _social_login_failure(exc: auth_use_cases.SocialLoginError) -> HTMLResponse:
+    if exc.kind == "machine_identity":
+        raise _social_http_error(exc) from exc
+    headline, sub, ok, status = _SOCIAL_PAGE_ERRORS[exc.kind]
+    return _auth_page(headline, sub, ok=ok, status=status)
+
+
 @app.get("/auth/github/callback")
 async def auth_github_callback(
     request: Request, code: str = "", state: str = "",
-    treg_oauth_state: str = Cookie(default=""), db: AsyncSession = Depends(get_session),
+    treg_oauth_state: str = Cookie(default=""),
 ):
-    if not code or not state or state != treg_oauth_state:  # CSRF: state must echo our cookie
-        return _auth_page("Login failed", "Bad state. Please start the login again.", ok=False, status=400)
-    s = get_settings()
-    client = request.app.state.http
     try:
-        tok = (await client.post(
-            s.github_token_url, headers={"Accept": "application/json"},
-            data={"client_id": s.github_client_id, "client_secret": s.github_client_secret,
-                  "code": code, "redirect_uri": f"{_login_callback_base(request)}/auth/github/callback"},
-        )).json()
-        access = tok.get("access_token")
-        if not access:
-            return _auth_page("Login failed", "No access token from GitHub.", ok=False, status=400)
-        gh = {"Authorization": f"Bearer {access}", "Accept": "application/json", "User-Agent": "treg"}
-        prof = (await client.get(f"{s.github_api_url}/user", headers=gh)).json()
-        email = prof.get("email")
-        if not email:
-            emails = (await client.get(f"{s.github_api_url}/user/emails", headers=gh)).json()
-            if isinstance(emails, list):
-                email = (next((e["email"] for e in emails if e.get("primary") and e.get("verified")), None)
-                         or next((e["email"] for e in emails if e.get("verified")), None))
-        if not email:
-            return _auth_page("Login failed", "No verified email on your GitHub account.", ok=False, status=400)
-    except Exception as exc:  # noqa: BLE001
-        print(f"[auth] github callback error: {exc}")  # keep internals server-side, not in the response
-        return _auth_page("Login failed", "Something went wrong. Please try again.", ok=False, status=502)
-
-    user = await _find_or_create_user(db, email)  # first login = registration (user only; no auto org)
-    if user.suspended:  # a banned account may prove its email but must not receive a live session
-        return _auth_page("Account suspended", "This account has been suspended.", ok=False, status=403)
-    await db.commit()
-
-    # Browser session OR `treg login` handshake — both go through the /login team picker now.
-    return _finish_oauth_login(request, user, _cli_states.pop(state, None))
+        proof = await auth_use_cases.complete_github_login(
+            request.app.state.http, code, state, treg_oauth_state,
+            lambda: _login_callback_base(request),
+        )
+    except auth_use_cases.SocialLoginError as exc:
+        return _social_login_failure(exc)
+    return _finish_oauth_login(request, proof.user, proof.cli_state)
 
 
 @app.get("/auth/google")
 async def auth_google(request: Request, cli: str = ""):
     """Human login via Google OAuth — a parallel door to GitHub, same session/CLI-handshake plumbing."""
-    s = get_settings()
-    if not s.google_client_id:
-        raise HTTPException(status_code=503, detail="Google login not configured")
-    redirect = f"{_login_callback_base(request)}/auth/google/callback"
-    state = crypto.new_token()
-    if cli:  # a `treg login` handshake, not a browser session
-        _prune_handshakes()
-        _cli_states[state] = (cli, _utcnow_naive())
-    url = (f"{s.google_authorize_url}?client_id={s.google_client_id}"
-           f"&redirect_uri={quote(redirect, safe='')}&response_type=code"
-           f"&scope={quote('openid email profile')}&state={state}&prompt=select_account")
-    resp = RedirectResponse(url, status_code=302)
-    resp.set_cookie("treg_oauth_state", state, httponly=True, max_age=600, samesite="lax", secure=_is_https(request))
+    try:
+        started = auth_use_cases.start_google_login(cli, lambda: _login_callback_base(request))
+    except auth_use_cases.SocialLoginError as exc:
+        raise _social_http_error(exc) from exc
+    resp = RedirectResponse(started.url, status_code=302)
+    resp.set_cookie("treg_oauth_state", started.state, httponly=True, max_age=600,
+                    samesite="lax", secure=_is_https(request))
     return resp
 
 
 @app.get("/auth/google/callback")
 async def auth_google_callback(
     request: Request, code: str = "", state: str = "",
-    treg_oauth_state: str = Cookie(default=""), db: AsyncSession = Depends(get_session),
+    treg_oauth_state: str = Cookie(default=""),
 ):
-    if not code or not state or state != treg_oauth_state:  # CSRF: state must echo our cookie
-        return _auth_page("Login failed", "Bad state. Please start the login again.", ok=False, status=400)
-    s = get_settings()
-    client = request.app.state.http
     try:
-        tok = (await client.post(
-            s.google_token_url, headers={"Accept": "application/json"},
-            data={"client_id": s.google_client_id, "client_secret": s.google_client_secret,
-                  "code": code, "grant_type": "authorization_code",
-                  "redirect_uri": f"{_login_callback_base(request)}/auth/google/callback"},
-        )).json()
-        access = tok.get("access_token")
-        if not access:
-            return _auth_page("Login failed", "No access token from Google.", ok=False, status=400)
-        prof = (await client.get(
-            s.google_userinfo_url,
-            headers={"Authorization": f"Bearer {access}", "Accept": "application/json"})).json()
-        email = prof.get("email")
-        if not email:
-            return _auth_page("Login failed", "No email on your Google account.", ok=False, status=400)
-        # Identity is keyed by email, so we must only trust a VERIFIED one — else an unverified Google
-        # address equal to a victim's registered email would resolve to the victim (account takeover).
-        # (Google's userinfo returns email_verified; the GitHub door already filters for verified.)
-        if not prof.get("email_verified"):
-            return _auth_page("Login failed", "Your Google email isn't verified.", ok=False, status=400)
-    except Exception as exc:  # noqa: BLE001
-        print(f"[auth] google callback error: {exc}")  # keep internals server-side, not in the response
-        return _auth_page("Login failed", "Something went wrong. Please try again.", ok=False, status=502)
-
-    user = await _find_or_create_user(db, email)  # first login = registration (user only; no auto org)
-    if user.suspended:
-        return _auth_page("Account suspended", "This account has been suspended.", ok=False, status=403)
-    await db.commit()
-
-    # Browser session OR `treg login` handshake — both go through the /login team picker now.
-    return _finish_oauth_login(request, user, _cli_states.pop(state, None))
+        proof = await auth_use_cases.complete_google_login(
+            request.app.state.http, code, state, treg_oauth_state,
+            lambda: _login_callback_base(request),
+        )
+    except auth_use_cases.SocialLoginError as exc:
+        return _social_login_failure(exc)
+    return _finish_oauth_login(request, proof.user, proof.cli_state)
 
 
 # The app alias preserves the moved handlers' original @app decorators byte-for-byte.
@@ -601,34 +561,20 @@ def _intercom_user_hash(email: str) -> str:
 async def auth_me(
     x_treg_token: str = Header(default=""),
     treg_session: str = Cookie(default=""),
-    db: AsyncSession = Depends(get_session),
 ) -> dict:
     """Who is the caller? Drives the dashboard's identity display in BOTH session mode (cookie) and
     token mode (X-Treg-Token) — the token door otherwise had no way to learn its own email, which
     broke `isPersonal` and join-by-code."""
-    membership = None
-    if x_treg_token:
-        m = await _membership_by_token(x_treg_token, db)
-        membership = m
-        user = await db.get(User, m.user_id) if m else await _user_from_identity_token(x_treg_token, db)
-        if user is not None and user.suspended:
-            user = None
-    else:
-        user = await _user_from_session(treg_session, db)
-    if user is None:
-        raise HTTPException(status_code=401, detail="no session")
-    out = {"email": user.email, "is_superadmin": user.is_superadmin, "onboarded": user.onboarded,
-           "github": bool(get_settings().github_client_id)}
-    if (ich := _intercom_user_hash(user.email)):
+    try:
+        identity = await auth_use_cases.current_identity(x_treg_token, treg_session)
+    except auth_use_cases.IdentityLookupError as exc:
+        raise HTTPException(status_code=401, detail="no session") from exc
+    out = {"email": identity.email, "is_superadmin": identity.is_superadmin, "onboarded": identity.onboarded,
+           "github": identity.github}
+    if (ich := _intercom_user_hash(identity.email)):
         out["intercom_user_hash"] = ich
-    if membership is not None:
-        # The org this token IS. A machine identity cannot call GET /orgs — `require_identity`
-        # refuses it on purpose, since `create_org` hangs off that dependency and an agent could
-        # otherwise mint an org it owns. But it still has to learn its OWN org id to reach any
-        # /orgs/{id}/... route, and being unable to told `treg balance` there was "no active org".
-        org = await db.get(Org, membership.org_id)
-        out |= {"org_id": membership.org_id, "org": org.slug if org else None,
-                "role": membership.role}
+    if identity.org_id is not None:
+        out |= {"org_id": identity.org_id, "org": identity.org, "role": identity.role}
     return out
 
 

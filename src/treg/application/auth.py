@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 import hmac
 import secrets as _secrets
+from urllib.parse import quote
 
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,7 +16,14 @@ from sqlmodel import select
 from .. import crypto, db as database, demo as demo_seed, email as email_sender, ratestore
 from ..config import get_settings
 from ..domain.identity import session as sess
-from ..domain.identity.access import _is_machine_email, _norm_email, _resolve_org, _user_from_session
+from ..domain.identity.access import (
+    _is_machine_email,
+    _membership_by_token,
+    _norm_email,
+    _resolve_org,
+    _user_from_identity_token,
+    _user_from_session,
+)
 from ..models import Membership, Org, Tool, User
 from ..timeutil import utcnow_naive as _utcnow_naive
 from . import signup
@@ -71,11 +80,46 @@ class CliPairingError(Exception):
         super().__init__(kind)
 
 
+class SocialLoginError(Exception):
+    """A framework-neutral social-login outcome translated by the HTTP router."""
+
+    def __init__(self, kind: str):
+        self.kind = kind
+        super().__init__(kind)
+
+
+class IdentityLookupError(Exception):
+    """The presented browser or token identity did not resolve to an active user."""
+
+
 @dataclass(frozen=True)
 class VerifiedEmail:
     token: str
     email: str
     session_cookie: str
+
+
+@dataclass(frozen=True)
+class SocialLoginStart:
+    state: str
+    url: str
+
+
+@dataclass(frozen=True)
+class SocialLoginProof:
+    user: User
+    cli_state: tuple | None
+
+
+@dataclass(frozen=True)
+class CurrentIdentity:
+    email: str
+    is_superadmin: bool
+    onboarded: bool
+    github: bool
+    org_id: int | None = None
+    org: str | None = None
+    role: str | None = None
 
 
 async def start_email_login(email: str, client_ip: str) -> dict:
@@ -237,3 +281,149 @@ async def cli_session_email(session_cookie: str) -> str | None:
     async with database.session_maker() as db:
         user = await _user_from_session(session_cookie, db)
         return user.email if user else None
+
+
+def start_github_login(cli: str, callback_base: Callable[[], str]) -> SocialLoginStart:
+    s = get_settings()
+    if not s.github_client_id:
+        raise SocialLoginError("github_not_configured")
+    redirect = f"{callback_base()}/auth/github/callback"
+    state = crypto.new_token()
+    if cli:  # this is a `treg login` handshake, not a browser session
+        _prune_handshakes()  # evict abandoned handshakes so this map can't grow unbounded
+        _cli_states[state] = (cli, _utcnow_naive())
+    url = (f"{s.github_authorize_url}?client_id={s.github_client_id}"
+           f"&redirect_uri={quote(redirect, safe='')}&scope={quote('read:user user:email')}&state={state}")
+    return SocialLoginStart(state=state, url=url)
+
+
+def start_google_login(cli: str, callback_base: Callable[[], str]) -> SocialLoginStart:
+    s = get_settings()
+    if not s.google_client_id:
+        raise SocialLoginError("google_not_configured")
+    redirect = f"{callback_base()}/auth/google/callback"
+    state = crypto.new_token()
+    if cli:  # a `treg login` handshake, not a browser session
+        _prune_handshakes()
+        _cli_states[state] = (cli, _utcnow_naive())
+    url = (f"{s.google_authorize_url}?client_id={s.google_client_id}"
+           f"&redirect_uri={quote(redirect, safe='')}&response_type=code"
+           f"&scope={quote('openid email profile')}&state={state}&prompt=select_account")
+    return SocialLoginStart(state=state, url=url)
+
+
+async def _provision_social_user(email: str, state: str) -> SocialLoginProof:
+    async with database.session_maker() as db:
+        try:
+            user = await signup.find_or_create_user(db, email)  # first login = registration (user only; no auto org)
+        except signup.MachineIdentityError as exc:
+            raise SocialLoginError("machine_identity") from exc
+        if user.suspended:  # a banned account may prove its email but must not receive a live session
+            raise SocialLoginError("suspended")
+        await db.commit()
+        # Browser session OR `treg login` handshake — both go through the /login team picker now.
+        return SocialLoginProof(user=user, cli_state=_cli_states.pop(state, None))
+
+
+async def complete_github_login(
+    client, code: str, state: str, cookie_state: str, callback_base: Callable[[], str],
+) -> SocialLoginProof:
+    if not code or not state or state != cookie_state:
+        raise SocialLoginError("bad_state")
+    s = get_settings()
+    try:
+        tok = (await client.post(
+            s.github_token_url, headers={"Accept": "application/json"},
+            data={"client_id": s.github_client_id, "client_secret": s.github_client_secret,
+                  "code": code, "redirect_uri": f"{callback_base()}/auth/github/callback"},
+        )).json()
+        access = tok.get("access_token")
+        if not access:
+            raise SocialLoginError("github_no_access_token")
+        gh = {"Authorization": f"Bearer {access}", "Accept": "application/json", "User-Agent": "treg"}
+        prof = (await client.get(f"{s.github_api_url}/user", headers=gh)).json()
+        email = prof.get("email")
+        if not email:
+            emails = (await client.get(f"{s.github_api_url}/user/emails", headers=gh)).json()
+            if isinstance(emails, list):
+                email = (next((e["email"] for e in emails if e.get("primary") and e.get("verified")), None)
+                         or next((e["email"] for e in emails if e.get("verified")), None))
+        if not email:
+            raise SocialLoginError("github_no_verified_email")
+    except SocialLoginError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        print(f"[auth] github callback error: {exc}")  # keep internals server-side, not in the response
+        raise SocialLoginError("callback_failed") from exc
+    return await _provision_social_user(email, state)
+
+
+async def complete_google_login(
+    client, code: str, state: str, cookie_state: str, callback_base: Callable[[], str],
+) -> SocialLoginProof:
+    if not code or not state or state != cookie_state:
+        raise SocialLoginError("bad_state")
+    s = get_settings()
+    try:
+        tok = (await client.post(
+            s.google_token_url, headers={"Accept": "application/json"},
+            data={"client_id": s.google_client_id, "client_secret": s.google_client_secret,
+                  "code": code, "grant_type": "authorization_code",
+                  "redirect_uri": f"{callback_base()}/auth/google/callback"},
+        )).json()
+        access = tok.get("access_token")
+        if not access:
+            raise SocialLoginError("google_no_access_token")
+        prof = (await client.get(
+            s.google_userinfo_url,
+            headers={"Authorization": f"Bearer {access}", "Accept": "application/json"})).json()
+        email = prof.get("email")
+        if not email:
+            raise SocialLoginError("google_no_email")
+        # Identity is keyed by email, so we must only trust a VERIFIED one — else an unverified Google
+        # address equal to a victim's registered email would resolve to the victim (account takeover).
+        # (Google's userinfo returns email_verified; the GitHub door already filters for verified.)
+        if not prof.get("email_verified"):
+            raise SocialLoginError("google_unverified_email")
+    except SocialLoginError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        print(f"[auth] google callback error: {exc}")  # keep internals server-side, not in the response
+        raise SocialLoginError("callback_failed") from exc
+    return await _provision_social_user(email, state)
+
+
+async def current_identity(x_treg_token: str, session_cookie: str) -> CurrentIdentity:
+    async with database.session_maker() as db:
+        membership = None
+        if x_treg_token:
+            membership = await _membership_by_token(x_treg_token, db)
+            user = (await db.get(User, membership.user_id) if membership
+                    else await _user_from_identity_token(x_treg_token, db))
+            if user is not None and user.suspended:
+                user = None
+        else:
+            user = await _user_from_session(session_cookie, db)
+        if user is None:
+            raise IdentityLookupError
+        org_id = None
+        org_slug = None
+        role = None
+        if membership is not None:
+            # The org this token IS. A machine identity cannot call GET /orgs — `require_identity`
+            # refuses it on purpose, since `create_org` hangs off that dependency and an agent could
+            # otherwise mint an org it owns. But it still has to learn its OWN org id to reach any
+            # /orgs/{id}/... route, and being unable to told `treg balance` there was "no active org".
+            org = await db.get(Org, membership.org_id)
+            org_id = membership.org_id
+            org_slug = org.slug if org else None
+            role = membership.role
+        return CurrentIdentity(
+            email=user.email,
+            is_superadmin=user.is_superadmin,
+            onboarded=user.onboarded,
+            github=bool(get_settings().github_client_id),
+            org_id=org_id,
+            org=org_slug,
+            role=role,
+        )

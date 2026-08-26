@@ -102,12 +102,11 @@ The three short-lived process-local dictionaries live with that state machine ra
 boundary. Router and API compatibility aliases reference the same dictionary objects, so social-login
 callbacks and existing tests cannot split handshake state through a copy or rebind.
 
-The GitHub and Google entry/callback handlers now live in the preceding social-login router block,
-along with their callback-host and shared auth-page helpers. The callbacks still add and pop individual
-entries through the application-owned `_cli_states` dictionary alias, so moving the HTTP handlers does
-not split the CLI handshake state. A separate session-identity block after CLI pairing owns `/auth/me`
-and `/auth/logout`. `api.py` attaches all four auth blocks at their original points, preserving the
-route snapshot, and re-exports the same handler and helper objects for compatibility.
+The social-login router owns GitHub/Google cookies, redirects, callback-host selection, and HTML error
+pages. `application.auth` builds each authorization request, exchanges the provider code, validates
+the proven email, provisions the user, and commits before returning a framework-neutral proof. Its
+callbacks pop `_cli_states` only after that commit. The session-identity block translates
+`application.auth.current_identity` for `/auth/me`; `/auth/logout` remains an HTTP-only cookie action.
 
 ## Endpoints
 - **Users / orgs:** `register_user` (`POST /users`, open, legacy — used by the test fixture) creates the
