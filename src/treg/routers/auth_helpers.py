@@ -2,6 +2,8 @@
 
 from fastapi import Request
 
+from ..config import get_settings
+
 
 def _is_https(request: Request) -> bool:
     # behind a reverse proxy (Render), TLS is terminated upstream and forwarded as http + X-Forwarded-Proto.
@@ -36,3 +38,29 @@ def _take_oauth_return(request: Request) -> str | None:
     # would have cost a silently-dropped authorization in production.
     target = (request.cookies.get(OAUTH_RETURN_COOKIE) or "").strip('"')
     return target if target.startswith("/oauth/authorize?") else None
+
+
+def _same_origin(request: Request) -> bool:
+    """CSRF guard for cookie-authenticated mutations: the Origin header (when a browser sends one)
+    must be this server itself. "Itself" is EITHER the configured public URL or the host the request
+    actually arrived on — public_url alone would reject legitimate localhost/dev-box origins."""
+    origin = (request.headers.get("origin") or "").rstrip("/")
+    if not origin:
+        return True  # non-browser clients (and some same-origin GETs) send no Origin
+    if origin == get_settings().public_url.rstrip("/"):
+        return True
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host", "")
+    if origin == f"{'https' if _is_https(request) else 'http'}://{host}":
+        return True
+    # `Origin: null` is a browser telling us the submitting document has an OPAQUE origin, which it
+    # does after certain redirect chains — a consent form reached by way of a sign-in bounce through
+    # GitHub, for instance. It is not evidence of a cross-site request, and treating it as one made
+    # the OAuth consent screen fail intermittently: refused on the attempt that went through
+    # sign-in, accepted on the retry that did not.
+    #
+    # `Sec-Fetch-Site` is the right corroboration. It is set by the browser and cannot be written by
+    # script, so a page on another site cannot forge `same-origin` — which is exactly what Origin was
+    # being used to prove.
+    if origin == "null" and request.headers.get("sec-fetch-site") in ("same-origin", "none"):
+        return True
+    return False

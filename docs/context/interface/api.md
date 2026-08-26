@@ -30,7 +30,7 @@ related:
 
 # The API
 
-Route definitions live on `api.router`; the email OTP block is defined in `routers.auth`, the open
+Route definitions live on `api.router`; the email OTP and CLI pairing blocks are defined in `routers.auth`, the open
 Catalog JSON block is defined in `routers.catalog`, the three presentation blocks are defined in
 `routers.web`, and the two cross-tenant admin read/report blocks are defined in `routers.admin`.
 `api.py` attaches each block at its original registration point. `bootstrap.create_app()` assembles
@@ -81,7 +81,9 @@ what they created; `_require_admin_of` gates the org-admin endpoints. See
 Cookie mechanics stay at the HTTP boundary: OAuth return-path parking lives in
 `routers.auth_helpers`, and signup referral parking lives in `routers.signup_cookies`. Neither helper
 belongs to the identity domain because both interpret request cookies and the referral helper also
-normalizes through the referrals subsystem.
+normalizes through the referrals subsystem. The shared `_same_origin` CSRF check also lives in
+`routers.auth_helpers`, so cookie-authenticated mutations can reuse it without a router importing the
+legacy API module.
 
 The email OTP endpoints are thin HTTP shells over `application.auth.start_email_login` and
 `verify_email_login`. The application use case opens its own session and is the only layer that commits
@@ -89,6 +91,12 @@ OTP rate, attempt, consumption, and user-provisioning state. It returns framewor
 `EmailAuthError`; `routers.auth` alone maps those refusals to the existing HTTP status/detail pairs and
 sets the browser cookie. Shared first-proof provisioning lives in `application.signup.find_or_create_user`
 so later identity doors reuse one command rather than copying its query and uniqueness-race handling.
+
+The CLI pairing state, start/poll/approve endpoints, team picker, and `/login` presentation live in a
+second ordered router block in `routers.auth`. `api.py` attaches it at the original point after the
+GitHub and Google callbacks, preserving the route snapshot. During the staged social-login move,
+`api.py` binds its existing shared `_auth_page` helper into that router; the next auth journey removes
+this temporary composition seam when the shared presentation helper moves with its other callers.
 
 ## Endpoints
 - **Users / orgs:** `register_user` (`POST /users`, open, legacy — used by the test fixture) creates the
