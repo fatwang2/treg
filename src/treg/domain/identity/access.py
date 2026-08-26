@@ -96,10 +96,14 @@ async def require_identity(
                 "this token belongs to a machine identity — it can call this team's tools, "
                 "but cannot act as a user"))
         if user is not None and not user.suspended:
+            # Release the auth read transaction before a handler opens an application session;
+            # holding this pool slot while waiting for a second one can deadlock a bounded pool.
+            await db.commit()
             return user
         raise HTTPException(status_code=401, detail="invalid token")
     user = await _user_from_session(treg_session, db)
     if user is not None:
+        await db.commit()
         return user
     raise HTTPException(status_code=401, detail="not authenticated")
 
@@ -165,6 +169,7 @@ async def require_member(
         if not (request.url.path.startswith("/call/") or request.method in ("GET", "HEAD", "OPTIONS")):
             raise HTTPException(status_code=403, detail=(
                 "this is a public demo team — its token can only call tools and read"))
+    await db.commit()
     return Caller(membership=membership, user=user, org=org)
 
 
@@ -177,6 +182,7 @@ async def require_superadmin(
     is_superadmin, OR a session whose user is is_superadmin. Returns a principal (for audit)."""
     admin = get_settings().admin_token
     if x_treg_token and admin and hmac.compare_digest(x_treg_token, admin):
+        await db.commit()
         return "env-admin"
     user: User | None = None
     if x_treg_token:
@@ -185,6 +191,7 @@ async def require_superadmin(
     else:
         user = await _user_from_session(treg_session, db)
     if user is not None and user.is_superadmin and not user.suspended:
+        await db.commit()
         return user.email
     if not x_treg_token and not treg_session:  # nothing presented → not authenticated
         raise HTTPException(status_code=401, detail="not authenticated")

@@ -76,6 +76,9 @@ with the names of the colliding usable tools and the explicit `/call/<name>/<pat
 `Membership` by `token_hash`, and returns a `Caller` (`membership, user, org` + `org_id`/`email`/`role`);
 401 on missing/invalid. Every scoped endpoint depends on it **except** `POST /users` + `POST
 /invites/accept` (open, self-registering) and `GET /oauth/callback` (browser-hit, protected by `state`).
+Each successful identity dependency commits its read-only transaction before the handler runs, so an
+application use case can open its own session without waiting behind the request's pool slot. The
+dependency-cached session remains usable because `session_maker` sets `expire_on_commit=False`.
 Authz = org scoping + a role gate: `_can_manage` lets admin/owner manage any org resource, a member only
 what they created; `_require_admin_of` gates the org-admin endpoints. See
 [multi-tenancy](../architecture/multi-tenancy.md).

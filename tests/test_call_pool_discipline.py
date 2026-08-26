@@ -17,14 +17,17 @@ typed 503 a genuinely saturated pool now answers instead of an anonymous 500.
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from treg import api as A
 from treg import audit, ledger
+from treg.config import get_settings
 from treg.db import _engine, session_maker
 from treg.models import Hold
 
@@ -152,3 +155,29 @@ async def test_a_settle_that_loses_the_pool_once_retries_and_still_charges(
     assert r.status_code == 200 and calls == 2
     assert r.headers.get("X-Treg-Cost-Micro") == str(EP_MICRO)
     assert (await clients.get(f"/orgs/{org_id}/balance")).json()["balance_micro"] == before - EP_MICRO
+
+
+@pytest.mark.skipif(
+    not os.environ.get("TREG_TEST_DB_URL"), reason="requires the Postgres test database"
+)
+async def test_auth_releases_a_single_slot_pool_before_an_application_session(
+    clients: AsyncClient,
+):
+    """An auth dependency and its application use case must use one pool slot in sequence."""
+    await audit.drain()
+    original_bind = session_maker.kw["bind"]
+    limited_engine = create_async_engine(
+        get_settings().database_url,
+        pool_size=1,
+        max_overflow=0,
+        pool_timeout=2,
+    )
+    session_maker.kw["bind"] = limited_engine
+    try:
+        responses = await asyncio.gather(*(clients.get("/connections") for _ in range(6)))
+        assert [r.status_code for r in responses] == [200] * 6, [
+            (r.status_code, r.text) for r in responses
+        ]
+    finally:
+        session_maker.kw["bind"] = original_bind
+        await limited_engine.dispose()
