@@ -6,6 +6,8 @@ sources:
   - .github/workflows/ci.yml
   - src/treg/application/__init__.py
   - src/treg/domain/__init__.py
+  - src/treg/domain/governance/__init__.py
+  - src/treg/domain/governance/teams.py
   - src/treg/domain/identity/__init__.py
   - tests/test_import_lightness.py
 related:
@@ -39,12 +41,12 @@ indirectly. `as_packages = true` makes the source cover every current and future
 `api.py` remains the compatibility exporter and ordered route-table host, so the allowed direction is
 API to routers.
 
-Stage 3 adds the first domain contract: the complete `treg.domain.identity` package cannot import
+Stage 3 adds domain contracts as packages appear. The complete `treg.domain.identity` package cannot import
 `treg.api`, `treg.routers`, or `treg.application`. Identity now owns session signing and validation,
 MCP token and grant-family primitives, and caller/access resolution as a leaf. Sibling-domain
-contracts remain absent until those domain packages exist; no placeholder domains are created just to
-make a future boundary look active. The application package now exists for extracted use-case
-orchestration, so the identity-to-application prohibition is an active boundary rather than a future name.
+edges are added when the sibling appears; identity therefore also forbids governance. Governance may
+import identity but cannot import the API, routers, or application layer. Future sibling contracts remain
+absent until their packages exist, so no placeholder domain makes a future boundary look active.
 
 Two direct edges are precise exceptions. `cli.ensure_proxy_dependency` imports `cryptography` only after
 the user invokes the optional proxy feature and offers to install the proxy extra first.

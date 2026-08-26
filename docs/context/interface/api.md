@@ -11,9 +11,11 @@ sources:
   - src/treg/routers/auth.py
   - src/treg/routers/auth_helpers.py
   - src/treg/routers/catalog.py
+  - src/treg/routers/orgs.py
   - src/treg/routers/signup_cookies.py
   - src/treg/routers/web.py
   - src/treg/domain/identity/access.py
+  - src/treg/domain/governance/teams.py
   - src/treg/domain/identity/mcp_oauth.py
   - src/treg/domain/identity/session.py
   - src/treg/timeutil.py
@@ -107,6 +109,9 @@ pages. `application.auth` builds each authorization request, exchanges the provi
 the proven email, provisions the user, and commits before returning a framework-neutral proof. Its
 callbacks pop `_cli_states` only after that commit. The session-identity block translates
 `application.auth.current_identity` for `/auth/me`; `/auth/logout` remains an HTTP-only cookie action.
+`routers.orgs` translates signup and team-entry HTTP. `application.signup` owns the two creation
+transactions and their promo, conversion, and referral sequence; `domain.governance.teams` owns team
+slug and membership creation plus the team-switcher read model.
 
 ## Endpoints
 - **Users / orgs:** `register_user` (`POST /users`, open, legacy — used by the test fixture) creates the

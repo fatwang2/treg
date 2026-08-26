@@ -6,9 +6,11 @@ sources:
   - src/treg/api.py
   - src/treg/application/auth.py
   - src/treg/application/signup.py
+  - src/treg/domain/governance/teams.py
   - src/treg/domain/identity/access.py
   - src/treg/domain/identity/session.py
   - src/treg/routers/auth.py
+  - src/treg/routers/orgs.py
   - src/treg/db.py
   - tests/test_router_dependencies.py
 related:
@@ -144,6 +146,9 @@ identity classification. `api.py` re-exports the same objects so existing caller
 retain their import path while route definitions move out incrementally. Session signing and validation
 live beside it in `domain.identity.session`; `treg.session` remains a compatibility alias, while runtime
 owners use the domain path. The former transitional `routers.dependencies` module is deleted.
+`routers.orgs` owns signup and team-entry HTTP translation. `application.signup` owns their sessions,
+commits, attribution, referral sequencing, and promotional grant; `domain.governance.teams` owns slug,
+Org and Membership creation rules, and the team-switcher read model.
 - **Registration is shared across doors:** `application.signup.find_or_create_user(db, email)` finds a user or creates them
   — **the user ONLY, no auto personal org** (as of the no-personal-org change). Every identity door calls
   it (GitHub / Google callbacks, email OTP), so "first proof = registration" is identical. A brand-new
@@ -157,7 +162,7 @@ owners use the domain path. The former transitional `routers.dependencies` modul
 - **Org management endpoints:** `register_user` (`POST /users`, legacy open-registration, used by the
   test fixture) still creates the user + an org + owner membership via `_make_org_membership` (mints the
   token) — NOT reached by the dashboard/CLI login doors, which no longer auto-make an org. Both this door
-  and `create_org` below now also read the first-party ad-click cookie (`api._ad_attribution_from`) and,
+  and `create_org` read the first-party ad-click cookie (`application.signup._ad_attribution_from`) and,
   when enabled and present, stamp `Org.ad_gclid`/`ad_click_id_type`/`ad_landing`/`ad_click_at` on the
   new org — preserving whether the click was a GCLID, GBRAID or WBRAID — see
   [ads-conversions](ads-conversions.md). `create_org`

@@ -190,6 +190,16 @@ from .routers.auth import (
     oauth_token,
     openai_apps_challenge,
 )
+from .application.signup import (
+    _ad_attribution_from,
+    _grant_signup_promo,
+    _redeem_referral,
+    _stamp_utm,
+    _utm_attribution_from,
+)
+from .domain.governance.teams import _make_org_membership, _slugify, _unique_slug
+from .routers import orgs as org_routes
+from .routers.orgs import OrgIn, UserIn, create_org, list_orgs, register_user
 from .routers.auth_helpers import (
     OAUTH_RETURN_COOKIE,
     _is_https,
@@ -899,15 +909,6 @@ def _require_local_run(caller: Caller) -> None:
 
 
 # ---- schemas ------------------------------------------------------------------------------
-class UserIn(BaseModel):
-    email: str
-    webhook_url: str | None = None
-
-
-class OrgIn(BaseModel):
-    name: str
-
-
 class InviteIn(BaseModel):
     email: str
     role: str = "member"
@@ -1086,146 +1087,7 @@ def _flat_binding(body: ToolIn) -> dict:
     }
 
 
-def _slugify(text: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-") or "org"
-
-
-async def _unique_slug(base: str, db: AsyncSession) -> str:
-    slug, i = base, 2
-    while (await db.execute(select(Org).where(Org.slug == slug))).scalar_one_or_none() is not None:
-        slug, i = f"{base}-{i}", i + 1
-    return slug
-
-
-async def _make_org_membership(
-    db: AsyncSession, user: User, name: str, slug_base: str, role: str, webhook_url: str | None = None
-) -> tuple[Org, str]:
-    """Create an Org + an owner/role Membership for `user`, minting a fresh org-scoped token.
-    Returns (org, plaintext token). Caller commits.
-    """
-    org = Org(name=name, slug=await _unique_slug(slug_base, db))
-    db.add(org)
-    await db.flush()
-    token = crypto.new_token()
-    db.add(
-        Membership(
-            user_id=user.id, org_id=org.id, role=role,
-            token_hash=crypto.hash_token(token), webhook_url=webhook_url,
-        )
-    )
-    return org, token
-
-
-async def _grant_signup_promo(db: AsyncSession, org: Org) -> None:
-    """Give a BRAND-NEW org its promotional balance, so an agent's first call needs no key and no card
-    (`settings.promo_grant_micro`, $1 by default). Called after the org is committed, from every door
-    that creates a real team — `ledger.grant` is idempotent per (org, kind), so a retried signup or a
-    second door can't double-grant, and existing orgs are never backfilled.
-
-    Demo/sandbox teams are created elsewhere (demo.py / sandbox.py) and deliberately get nothing: a
-    published demo token must not be able to spend real money. A grant failure must not fail the
-    signup — the org exists, and it can be topped up — so it is logged, not raised.
-    """
-    if org is None or org.id is None or org.demo or org.public_demo:
-        return
-    try:
-        # Queue BEFORE granting: adsconv.queue() only adds a row inside a SAVEPOINT, it never commits.
-        # ledger.grant() commits internally, so calling it second is what makes its commit durable for
-        # BOTH rows in one transaction — the event and its conversion must land together (see
-        # adsconv.queue's docstring). Reordering this silently reintroduces a two-transaction gap.
-        # Same door, same once-only guarantee: this function is already the single place a brand-new
-        # real team comes into existence.
-        try:
-            await adsconv.queue(db, org, adsconv.ACTION_SIGNUP)
-        except Exception as exc:  # noqa: BLE001 — its OWN guard, deliberately, not the outer one
-            # Because the queue now runs FIRST, sharing the outer except would mean an unexpected
-            # failure here (anything but the IntegrityError queue() already absorbs) skips the grant
-            # entirely and costs the team its $1 promotional credit. A marketing metric must not be
-            # able to take away a product benefit: swallow it here so the grant still runs.
-            logging.getLogger("treg").warning("ad conversion queue failed for org %s: %s", org.id, exc)
-        await ledger.grant(db, org.id)  # commits — absorbs the queued conversion row too
-    except Exception as exc:  # noqa: BLE001 — the team is already created; don't 500 the signup over credit
-        logging.getLogger("treg").warning("promo grant failed for org %s: %s", org.id, exc)
-
-
-def _ad_attribution_from(request: Request) -> tuple[str, str, str]:
-    """Return (click-id field, click-id, landing), with legacy GCLID-cookie compatibility."""
-    if not adsconv.enabled():
-        return "", "", ""
-    raw = request.cookies.get("treg_ad") or ""
-    if not raw:
-        return "", "", ""
-    first, separator, rest = unquote(raw).partition("|")
-    if separator and first in ("gclid", "gbraid", "wbraid"):
-        click_id, _, landing = rest.partition("|")
-        click_field = first
-    else:
-        # Old cookies were `CLICK_ID|landing` and always held a GCLID.
-        click_field, click_id, landing = "gclid", first, rest
-    return click_field, click_id.strip()[:255], landing.strip()[:64]
-
-
-_UTM_FIELDS = ("utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "utm_referrer")
-
-
-def _utm_attribution_from(request: Request) -> dict[str, str]:
-    """First-touch traffic source from the `treg_utm` cookie (set by web/sitetrack.js):
-    `source|medium|campaign|term|content|referring-host`, URL-encoded. Missing/short cookies yield
-    fewer fields; anything unparseable yields nothing. Values are capped so a hostile cookie cannot
-    bloat the row."""
-    raw = request.cookies.get("treg_utm") or ""
-    if not raw:
-        return {}
-    parts = [p.strip()[:100] for p in unquote(raw).split("|")]
-    out = {k: v for k, v in zip(_UTM_FIELDS, parts) if v}
-    return out
-
-
-def _stamp_utm(org: Org, request: Request) -> None:
-    """Persist the first-touch source on a brand-new team. Independent of the Google-Ads `treg_ad`
-    path: a sponsor link or a newsletter has no click id, and this is what lets us count its
-    signups. Called from both signup doors, like `_ad_attribution_from`."""
-    for k, v in _utm_attribution_from(request).items():
-        setattr(org, k, v)
-
-
-# ---- users (open registration; personal org + owner membership; token shown once) ---------
-@app.post("/users")
-async def register_user(body: UserIn, request: Request, db: AsyncSession = Depends(get_session)) -> dict:
-    email = _norm_email(body.email)
-    # This door creates a User directly (it predates `_find_or_create_user`), so it needs the same
-    # machine-domain block — otherwise open registration could squat an agent address.
-    if _is_machine_email(email):
-        raise HTTPException(status_code=403, detail="this address cannot be used to sign in")
-    if body.webhook_url and not health.safe_webhook_url(body.webhook_url):  # SSRF guard on the alert URL
-        raise HTTPException(status_code=422, detail="webhook_url must be a public http(s) URL")
-    if (await db.execute(select(User).where(User.email == email))).scalar_one_or_none():
-        raise HTTPException(status_code=409, detail="email already registered")
-    user = User(email=email)
-    db.add(user)
-    await db.flush()
-    org, token = await _make_org_membership(
-        db, user, name=email, slug_base=_slugify(email), role="owner", webhook_url=body.webhook_url
-    )
-    click_field, gclid, landing = _ad_attribution_from(request)
-    if gclid:
-        org.ad_gclid = gclid
-        org.ad_click_id_type = click_field
-        org.ad_landing = landing or None
-        org.ad_click_at = _utcnow_naive()  # naive UTC: asyncpg rejects tz-aware into a
-                                            # TIMESTAMP WITHOUT TIME ZONE column (see models._now).
-        db.add(org)
-    _stamp_utm(org, request)
-    db.add(org)
-    try:
-        await db.commit()
-    except IntegrityError:
-        raise HTTPException(status_code=409, detail="email already registered")
-    await _grant_signup_promo(db, org)
-    # Both org-creating doors redeem, for the same reason both grant the signup promo: this one
-    # predates `_find_or_create_user` but still ends with a person owning a fresh team and a balance.
-    await _redeem_referral(db, request, user, org)
-    return {"id": user.id, "email": user.email, "org": org.slug, "org_id": org.id, "role": "owner", "token": token}
+router.routes.extend(org_routes.signup_router.routes)
 
 
 # ---- orgs, invites, members (multi-tenancy management) ------------------------------------
@@ -1254,115 +1116,10 @@ async def _count_owners(org_id: int, db: AsyncSession) -> int:
     return len(rows)
 
 
-@app.post("/orgs")
-async def create_org(
-    body: OrgIn, request: Request,
-    user: User = Depends(require_identity), db: AsyncSession = Depends(get_session),
-) -> dict:
-    # Any authenticated user spins up a new org and becomes its owner, minting a fresh org-scoped
-    # token for it. **require_identity, NOT require_member** — a brand-new user has zero orgs (no auto
-    # personal org anymore), so creating their FIRST team must not require already being in one.
-    if demo_sandbox.is_sandbox_user(user):  # the anonymous demo can't mint a real team — sign in first
-        raise HTTPException(status_code=403, detail=(
-            "the demo sandbox can't create a real team — sign in with GitHub, Google, or email to make one"))
-    user_id = user.id  # snapshot BEFORE the loop: db.rollback() expires ORM instances, so
-    name = body.name   # touching `user` afterwards could trigger a lazy load → MissingGreenlet.
-    click_field, gclid, landing = _ad_attribution_from(request)  # the OTHER signup door
-    # (browser sign-in → mandatory first-team creation), separate from register_user's /users. A
-    # browser visitor who clicked an ad lands here, not there, so attribution must be read in both.
-    for _ in range(3):  # a concurrent create can take the slug between _unique_slug and commit — retry
-        org = Org(name=name, slug=await _unique_slug(_slugify(name), db))
-        db.add(org)
-        await db.flush()
-        token = crypto.new_token()
-        db.add(Membership(user_id=user_id, org_id=org.id, role="owner", token_hash=crypto.hash_token(token)))
-        if gclid:
-            org.ad_gclid = gclid
-            org.ad_click_id_type = click_field
-            org.ad_landing = landing or None
-            org.ad_click_at = _utcnow_naive()  # naive UTC: asyncpg rejects tz-aware into a
-                                                # TIMESTAMP WITHOUT TIME ZONE column (see models._now).
-            db.add(org)
-        _stamp_utm(org, request)
-        db.add(org)
-        try:
-            await db.commit()
-            break
-        except IntegrityError:
-            await db.rollback()
-    else:
-        raise HTTPException(status_code=409, detail="could not allocate a unique org slug — retry")
-    await _grant_signup_promo(db, org)
-    await _redeem_referral(db, request, user, org)
-    return {"org": org.slug, "org_id": org.id, "name": org.name, "role": "owner", "token": token}
-
-
-async def _redeem_referral(db: AsyncSession, request: Request, user: User, org: Org) -> None:
-    """Attribute a brand-new team to whoever's link brought them here. Owes nothing yet — the bonus
-    is earned at the team's first paid top-up, not at signup (see referrals.py).
-
-    Team creation is the right and only redemption point: `_find_or_create_user` deliberately makes
-    no org, so this is where a person first becomes a tenant with a balance. It fires on EVERY team
-    a user creates, and `referrals.attribute` is what refuses the ones that should not count — a
-    self-referral, a demo team, or an org that already carries a referral.
-
-    Swallow-and-log, matching `_grant_signup_promo` immediately above: a referral is a marketing
-    nicety and a signup is not. Nothing here may ever be the reason someone cannot make a team.
-    """
-    try:
-        code = _take_referral(request)
-        if code:
-            await referrals.attribute(db, user=user, org=org, code=code)
-    except Exception as exc:  # noqa: BLE001
-        logging.getLogger("treg").warning("referral attribution failed for org %s: %s", org.id, exc)
-
-
 router.routes.extend(auth_routes.grants_router.routes)
 
 
-@app.get("/orgs")
-async def list_orgs(
-    user: User = Depends(require_identity),
-    x_treg_token: str = Header(default=""),
-    x_treg_org: str = Header(default=""),
-    db: AsyncSession = Depends(get_session),
-) -> list[dict]:
-    # "active" = the caller's current org — the token's org (token auth) or X-Treg-Org (session).
-    current: int | None = None
-    if x_treg_token and (m := await _membership_by_token(x_treg_token, db)):
-        current = m.org_id
-    else:
-        # Identity token or session: X-Treg-Org wins, then a team-pinned identity token's own org
-        # claim — the same precedence `require_member` uses to authorize the call. Without the claim
-        # fallback, no org is marked active for a team-pinned token and clients guess (badly).
-        ref = x_treg_org or ((sess.read_claims(x_treg_token) or {}).get("org", "") if x_treg_token else "")
-        org = await _resolve_org(ref, db)
-        current = org.id if org else None
-    memberships = (
-        await db.execute(select(Membership).where(Membership.user_id == user.id))
-    ).scalars().all()
-    org_ids = [m.org_id for m in memberships]
-    orgs = {  # one batched query instead of one db.get per membership (N+1 on the org-switcher path)
-        o.id: o for o in (await db.execute(
-            select(Org).where(Org.id.in_(org_ids))
-        )).scalars().all()
-    }
-    # Tool count per org (one grouped query) so the dashboard can land on the org that actually has
-    # tools, instead of a first-run default that may be an empty team.
-    tool_counts = dict((await db.execute(
-        select(Tool.org_id, func.count(Tool.id)).where(Tool.org_id.in_(org_ids)).group_by(Tool.org_id)
-    )).all())
-    out: list[dict] = []
-    for m in memberships:
-        org = orgs.get(m.org_id)
-        if org is None:
-            continue
-        out.append({
-            "org_id": org.id, "slug": org.slug, "name": org.name,
-            "role": m.role, "active": org.id == current, "demo": org.demo,
-            "tool_count": tool_counts.get(org.id, 0),
-        })
-    return out
+router.routes.extend(org_routes.org_entry_router.routes)
 
 
 @app.post("/orgs/{org_id}/invites")

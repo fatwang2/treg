@@ -3,6 +3,7 @@ title: Google Ads conversion tracking — capture, outbox, upload
 status: shipped
 sources:
   - src/treg/adsconv.py
+  - src/treg/application/signup.py
   - src/treg/web/adtrack.js
 related:
   - architecture/money.md
@@ -37,7 +38,7 @@ read-side Ads catalog calls (`oauth_providers.GOOGLE_ADS`), a separate credentia
    browser at any point. The cookie records the mutually-exclusive field name as well as its value
    (`gclid|…`, `gbraid|…`, or `wbraid|…`); the old `CLICK_ID|landing` shape remains readable as a
    legacy GCLID.
-2. **Store** (`api._ad_attribution_from`, read at BOTH signup doors — `register_user` (`POST /users`)
+2. **Store** (`application.signup._ad_attribution_from`, read at both signup doors: `register_user` (`POST /users`)
    and `create_org` (`POST /orgs`), since a browser visitor who clicked an ad can land on either).
    The cookie is decoded and persisted onto the new `Org`: `ad_gclid` (the historical column name,
    now holding any supported click id), `ad_click_id_type`, `ad_landing` (the use-case page slug or
@@ -47,7 +48,7 @@ read-side Ads catalog calls (`oauth_providers.GOOGLE_ADS`), a separate credentia
    `AdConversion` outbox row inside a `SAVEPOINT` (a nested transaction, not a bare flush or a
    `db.rollback()` — this runs inside the CALLER's transaction, and a plain rollback on a duplicate
    would roll back their work too, e.g. undoing a Stripe credit on a redelivered webhook):
-   - `api._grant_signup_promo` → `ACTION_SIGNUP`, queued BEFORE `ledger.grant()`.
+   - `application.signup._grant_signup_promo` calls `ACTION_SIGNUP` before `ledger.grant()`.
    - `api._record_first_call` → `ACTION_FIRST_CALL`, on the org's first successful `/call/`.
    - `billing._credit` → `ACTION_PAID`, on the org's first credited top-up, carrying `value_usd_micro`.
    `queue()` no-ops (returns `False`) when tracking is disabled or the org has no `ad_gclid` — most

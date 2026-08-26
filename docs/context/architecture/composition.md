@@ -7,6 +7,7 @@ sources:
   - src/treg/domain/identity/session.py
   - src/treg/routers/admin.py
   - src/treg/routers/auth.py
+  - src/treg/routers/orgs.py
   - src/treg/routers/web.py
   - scripts/dump_surface.py
 related:
@@ -19,8 +20,8 @@ related:
 # Application composition
 
 `bootstrap.create_app(role)` is the FastAPI composition root. `api.py` hosts the ordered route table;
-the auth module defines login, session, invite, user-token, OAuth-server, and grant-management blocks,
-while the Catalog, web, and admin
+the auth module defines login, session, invite, user-token, OAuth-server, and grant-management blocks;
+the org module defines signup and team-entry blocks; the Catalog, web, and admin
 modules define their concern-specific `APIRouter` blocks that `api.py`
 appends at their legacy registration points. It then calls the factory once at EOF so the deployed
 and documented `treg.api:app` import path remains the default `all` role.
