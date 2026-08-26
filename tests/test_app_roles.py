@@ -29,10 +29,17 @@ def _all_routes() -> list[str]:
 
 
 _ALL_ROUTES = _all_routes()
+# MCP is calling traffic: the dataplane owns its mount and its RFC 9728 resource metadata.
+_DATAPLANE_ONLY = (
+    _CALL_ROUTE,
+    "GET,HEAD /.well-known/oauth-protected-resource/mcp",
+    "MOUNT /mcp",
+)
+_DATAPLANE_ROUTES = [route for route in _ALL_ROUTES if route in _DATAPLANE_ONLY]
 _EXPECTED_ROUTES = {
     "all": _ALL_ROUTES,
-    "dataplane": [_CALL_ROUTE],
-    "control": [route for route in _ALL_ROUTES if route != _CALL_ROUTE],
+    "dataplane": _DATAPLANE_ROUTES,
+    "control": [route for route in _ALL_ROUTES if route not in _DATAPLANE_ONLY],
 }
 _EXPECTED_BACKGROUND_TASKS = {
     "all": ["treg.adsconv.worker"],
@@ -51,13 +58,13 @@ _EXPECTED_STARTUP_CHECKS = {
         "treg.db.init_db",
         "treg.api._backfill_provider_extra_tools",
         "app.state.http",
+        "treg.mcp.mcp_lifespan",
     ],
     "control": [
         "treg.db.init_db",
         "treg.api._backfill_provider_extra_tools",
         "treg.api._bootstrap_single_user",
         "app.state.http",
-        "treg.mcp.mcp_lifespan",
     ],
 }
 

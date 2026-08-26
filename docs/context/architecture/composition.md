@@ -34,8 +34,12 @@ Every created app exposes `app.state.role_manifest` with explicit `routes`, `bac
 | Role | HTTP routes and mounts | Background tasks | Startup checks |
 |---|---|---|---|
 | `all` | The complete existing surface, including `/run`, static files, and `/mcp` | Ads conversion worker when enabled | DB init, provider-tool backfill, single-user bootstrap, HTTP client, MCP lifespan |
-| `dataplane` | Only `/call/{rest:path}`; no `/run`, static files, docs, OpenAPI, or MCP | None | DB init, provider-tool backfill, HTTP client |
-| `control` | Everything except `/call/{rest:path}`; includes `/run`, static files, and `/mcp` | Ads conversion worker when enabled | DB init, provider-tool backfill, single-user bootstrap, HTTP client, MCP lifespan |
+| `dataplane` | `/call/{rest:path}`, the `/mcp` mount, and its RFC 9728 resource-metadata route; no `/run`, static files, docs, or OpenAPI | None | DB init, provider-tool backfill, HTTP client, MCP lifespan |
+| `control` | Everything except the calling surface (`/call/{rest:path}`, `/mcp`, and its resource metadata); includes `/run` and static files | Ads conversion worker when enabled | DB init, provider-tool backfill, single-user bootstrap, HTTP client |
+
+MCP is calling traffic (the refactor plan's role table assigns `mcp.py` to the dataplane), so a future
+dataplane deployment serves agents on both entry points. OAuth token issuance - consent pages and the
+`/oauth/*` endpoints - stays on control; the MCP surface only validates tokens, which is a read.
 
 `_CONTROL_ROUTE_KEYS` and `_DATAPLANE_ROUTE_KEYS` assign every `api.router` route to exactly one
 owner. App creation fails on an unclassified, stale, duplicate, or multiply-owned key, so adding a
