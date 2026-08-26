@@ -4,6 +4,8 @@ status: shipped
 sources:
   - src/treg/models.py
   - src/treg/api.py
+  - src/treg/application/auth.py
+  - src/treg/application/signup.py
   - src/treg/domain/identity/access.py
   - src/treg/domain/identity/session.py
   - src/treg/routers/auth.py
@@ -142,7 +144,7 @@ identity classification. `api.py` re-exports the same objects so existing caller
 retain their import path while route definitions move out incrementally. Session signing and validation
 live beside it in `domain.identity.session`; `treg.session` remains a compatibility alias, while runtime
 owners use the domain path. The former transitional `routers.dependencies` module is deleted.
-- **Registration is shared across doors:** `_find_or_create_user(db, email)` finds a user or creates them
+- **Registration is shared across doors:** `application.signup.find_or_create_user(db, email)` finds a user or creates them
   — **the user ONLY, no auto personal org** (as of the no-personal-org change). Every identity door calls
   it (GitHub / Google callbacks, email OTP), so "first proof = registration" is identical. A brand-new
   user therefore lands with **zero teams** and must name + create their first one (the dashboard's

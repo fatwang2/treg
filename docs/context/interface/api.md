@@ -4,6 +4,8 @@ status: shipped
 sources:
   - src/treg/web/sitetrack.js
   - src/treg/api.py
+  - src/treg/application/auth.py
+  - src/treg/application/signup.py
   - src/treg/routers/__init__.py
   - src/treg/routers/admin.py
   - src/treg/routers/auth.py
@@ -80,6 +82,13 @@ Cookie mechanics stay at the HTTP boundary: OAuth return-path parking lives in
 `routers.auth_helpers`, and signup referral parking lives in `routers.signup_cookies`. Neither helper
 belongs to the identity domain because both interpret request cookies and the referral helper also
 normalizes through the referrals subsystem.
+
+The email OTP endpoints are thin HTTP shells over `application.auth.start_email_login` and
+`verify_email_login`. The application use case opens its own session and is the only layer that commits
+OTP rate, attempt, consumption, and user-provisioning state. It returns framework-neutral results or an
+`EmailAuthError`; `routers.auth` alone maps those refusals to the existing HTTP status/detail pairs and
+sets the browser cookie. Shared first-proof provisioning lives in `application.signup.find_or_create_user`
+so later identity doors reuse one command rather than copying its query and uniqueness-race handling.
 
 ## Endpoints
 - **Users / orgs:** `register_user` (`POST /users`, open, legacy — used by the test fixture) creates the

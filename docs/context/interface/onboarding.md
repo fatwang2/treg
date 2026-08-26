@@ -2,6 +2,7 @@
 title: Onboarding — the first-run demo team (dashboard + CLI)
 status: shipped
 sources:
+  - src/treg/application/auth.py
   - src/treg/demo.py
   - src/treg/cli.py
   - src/treg/routers/auth.py

@@ -4,6 +4,7 @@ status: shipped
 sources:
   - pyproject.toml
   - .github/workflows/ci.yml
+  - src/treg/application/__init__.py
   - src/treg/domain/__init__.py
   - src/treg/domain/identity/__init__.py
   - tests/test_import_lightness.py
@@ -42,7 +43,8 @@ Stage 3 adds the first domain contract: the complete `treg.domain.identity` pack
 `treg.api`, `treg.routers`, or `treg.application`. Identity now owns session signing and validation,
 MCP token and grant-family primitives, and caller/access resolution as a leaf. Sibling-domain
 contracts remain absent until those domain packages exist; no placeholder domains are created just to
-make a future boundary look active.
+make a future boundary look active. The application package now exists for extracted use-case
+orchestration, so the identity-to-application prohibition is an active boundary rather than a future name.
 
 Two direct edges are precise exceptions. `cli.ensure_proxy_dependency` imports `cryptography` only after
 the user invokes the optional proxy feature and offers to install the proxy extra first.
