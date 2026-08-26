@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import hmac
 import secrets as _secrets
+from typing import Any
 from urllib.parse import quote
 
 from sqlalchemy import func
@@ -395,10 +396,12 @@ async def _provision_social_user(email: str, state: str) -> SocialLoginProof:
 
 
 async def complete_github_login(
-    client, code: str, state: str, cookie_state: str, callback_base: Callable[[], str],
+    client_factory: Callable[[], Any], code: str, state: str, cookie_state: str,
+    callback_base: Callable[[], str],
 ) -> SocialLoginProof:
     if not code or not state or state != cookie_state:
         raise SocialLoginError("bad_state")
+    client = client_factory()
     s = get_settings()
     try:
         tok = (await client.post(
@@ -428,10 +431,12 @@ async def complete_github_login(
 
 
 async def complete_google_login(
-    client, code: str, state: str, cookie_state: str, callback_base: Callable[[], str],
+    client_factory: Callable[[], Any], code: str, state: str, cookie_state: str,
+    callback_base: Callable[[], str],
 ) -> SocialLoginProof:
     if not code or not state or state != cookie_state:
         raise SocialLoginError("bad_state")
+    client = client_factory()
     s = get_settings()
     try:
         tok = (await client.post(

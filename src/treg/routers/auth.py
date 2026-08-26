@@ -252,7 +252,7 @@ async def auth_github_callback(
 ):
     try:
         proof = await auth_use_cases.complete_github_login(
-            request.app.state.http, code, state, treg_oauth_state,
+            lambda: request.app.state.http, code, state, treg_oauth_state,
             lambda: _login_callback_base(request),
         )
     except auth_use_cases.SocialLoginError as exc:
@@ -280,7 +280,7 @@ async def auth_google_callback(
 ):
     try:
         proof = await auth_use_cases.complete_google_login(
-            request.app.state.http, code, state, treg_oauth_state,
+            lambda: request.app.state.http, code, state, treg_oauth_state,
             lambda: _login_callback_base(request),
         )
     except auth_use_cases.SocialLoginError as exc:

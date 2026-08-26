@@ -343,9 +343,9 @@ callbacks pop `_cli_states` only after that commit. The session-identity block t
   `/login?cli=<attacker-id>` link (whose code the victim doesn't have, or that was never `start`ed) can
   never complete. Deliberately a POST guarded by `_same_origin` (Origin must be the configured
   `public_url` **or** the request's own host — public_url alone broke localhost). The GitHub/Google
-  callbacks share `_finish_oauth_login`, which sets the session cookie then bounces a CLI handshake back
-  to `/login?cli=<id>` so **all four doors** go through the same picker. `auth_logout` uses the same
-  `_same_origin` guard.
+  callbacks validate cookie/query state before resolving the shared HTTP client; `_finish_oauth_login`
+  sets the session cookie and bounces to `/login?cli=<id>` for the shared picker. `auth_logout`
+  uses the same `_same_origin` guard.
   **Google** — `auth_google` / `auth_google_callback` (`GET /auth/google[/callback]`): the same
   session + CLI-handshake plumbing as GitHub (token from `google_token_url`, email from
   `google_userinfo_url`), gated on `google_client_id` and surfaced via `/meta`'s `google` flag. The
