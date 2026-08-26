@@ -7,6 +7,7 @@ from .. import oauth_providers
 from ..application import connect as connect_use_cases
 from ..domain.identity.access import Caller, _require_can_register, require_member
 from .auth import _auth_page
+from .resources import _visible_secret_ids
 
 
 class OAuthStartIn(BaseModel):
@@ -32,6 +33,15 @@ class TokenConnectIn(BaseModel):
     token: str
 
 
+class ResourceRefIn(BaseModel):
+    resource_ref: str
+    resource_name: str = ""  # the human label, so the UI never has to show "properties/384078430"
+
+
+class ExtraCredentialIn(BaseModel):
+    value: str
+
+
 _CONNECT_HTTP_ERRORS = {
     "unknown_provider": 404,
     "unknown_connection": 404,
@@ -40,6 +50,11 @@ _CONNECT_HTTP_ERRORS = {
     "invalid_token": 422,
     "provider_unreachable": 502,
     "unknown_state": 404,
+    "no_resource_discovery": 422,
+    "resource_discovery_failed": 502,
+    "no_extra_credential": 422,
+    "extra_credential_required": 422,
+    "all_orgs_forbidden": 403,
 }
 
 
@@ -141,3 +156,123 @@ async def oauth_status(
         return await connect_use_cases.get_oauth_status(state=state, org_id=caller.org_id)
     except connect_use_cases.ConnectError as exc:
         raise _connect_http_error(exc) from exc
+
+
+resources_router = APIRouter()
+
+
+@resources_router.get("/connections")
+async def list_connections(
+    caller: Caller = Depends(require_member),
+) -> list[dict]:
+    """Every OAuth credential in the org, with health AND expiry. Metadata only — no token material."""
+    return await connect_use_cases.list_connections(org_id=caller.org_id)
+
+
+@resources_router.get("/connections/{secret_id}/resources")
+async def connection_resources(
+    secret_id: int, request: Request,
+    caller: Caller = Depends(require_member),
+) -> dict:
+    """What this connection can act on — GSC sites, and later GA properties / Ads accounts.
+
+    Live-fetched rather than stored: the answer changes when the user gains or loses access
+    upstream, and a stale picker is worse than no picker."""
+    try:
+        return await connect_use_cases.list_connection_resources(
+            secret_id=secret_id,
+            org_id=caller.org_id,
+            client_factory=lambda: request.app.state.http,
+        )
+    except connect_use_cases.ConnectError as exc:
+        raise _connect_http_error(exc) from exc
+
+
+@resources_router.post("/connections/{secret_id}/resource")
+async def set_connection_resource(
+    secret_id: int, body: ResourceRefIn,
+    caller: Caller = Depends(require_member),
+) -> dict:
+    try:
+        return await connect_use_cases.select_connection_resource(
+            secret_id=secret_id,
+            resource_ref=body.resource_ref,
+            resource_name=body.resource_name,
+            org_id=caller.org_id,
+        )
+    except connect_use_cases.ConnectError as exc:
+        raise _connect_http_error(exc) from exc
+
+
+management_router = APIRouter()
+
+
+@management_router.post("/connections/{secret_id}/extra-credential")
+async def set_extra_credential(
+    secret_id: int, body: ExtraCredentialIn,
+    caller: Caller = Depends(require_member),
+) -> dict:
+    """Supply the second credential a provider needs, and finish building its tool.
+
+    Google Ads takes the user's OAuth bearer AND a developer-token header from an approved manager
+    account. treg can't invent the latter, so the connect deliberately stops short of a tool. This
+    is the other half: store the extra credential and provision the tool with BOTH bindings, so the
+    connection goes from "connected but uncallable" to actually usable."""
+    _require_can_register(caller)
+    try:
+        return await connect_use_cases.supply_extra_credential(
+            secret_id=secret_id,
+            value=body.value,
+            org_id=caller.org_id,
+            owner=caller.email,
+        )
+    except connect_use_cases.ConnectError as exc:
+        raise _connect_http_error(exc) from exc
+
+
+@management_router.delete("/connections/{secret_id}")
+async def revoke_connection(
+    secret_id: int, caller: Caller = Depends(require_member),
+) -> dict:
+    """Disconnect, and take the provider's own tool with it.
+
+    A tool left bound to a deleted credential isn't "still configured" — it's broken, and it says so
+    only at call time with "a bound secret is missing". We remove the tool treg auto-provisioned for
+    this provider (that's treg's creation, not the user's) and drop the dead binding from any tool
+    the user built themselves, leaving their other bindings intact."""
+    _require_can_register(caller)
+    try:
+        return await connect_use_cases.revoke_connection(
+            secret_id=secret_id, org_id=caller.org_id,
+        )
+    except connect_use_cases.ConnectError as exc:
+        raise _connect_http_error(exc) from exc
+
+
+health_router = APIRouter()
+
+
+@health_router.post("/health/run")
+async def run_health(
+    request: Request, all_orgs: bool = False,
+    caller: Caller = Depends(require_member),
+) -> dict:
+    try:
+        return await connect_use_cases.run_connection_health(
+            all_orgs=all_orgs,
+            is_superadmin=caller.user.is_superadmin,
+            org_id=caller.org_id,
+            client_factory=lambda: request.app.state.http,
+        )
+    except connect_use_cases.ConnectError as exc:
+        raise _connect_http_error(exc) from exc
+
+
+@health_router.get("/health")
+async def get_health(
+    caller: Caller = Depends(require_member),
+) -> list[dict]:
+    return await connect_use_cases.list_connection_health(
+        org_id=caller.org_id,
+        visible_ids_for=lambda db: _visible_secret_ids(caller, db),
+    )

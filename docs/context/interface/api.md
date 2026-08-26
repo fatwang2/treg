@@ -38,7 +38,7 @@ related:
 
 Route definitions live on `api.router`; login, session, invite, OAuth-server, and grant-management blocks
 are defined in `routers.auth`; the open Catalog JSON block is defined in `routers.catalog`; the
-three presentation blocks are defined in `routers.web`; connection establishment is defined in
+three presentation blocks are defined in `routers.web`; connection lifecycle and health are defined in
 `routers.connections`; and the cross-tenant admin read, mutation,
 and report blocks are defined in `routers.admin`.
 `api.py` attaches each block at its original registration point. `bootstrap.create_app()` assembles
@@ -120,9 +120,9 @@ and bundle HTTP. `application.signup` owns the two creation
 transactions and their promo, conversion, and referral sequence; `domain.governance.teams` owns team
 slug and membership creation plus the team-switcher read model.
 
-`application.connect` owns OAuth-start, OAuth-callback, pasted-token, status, and provider-companion
-backfill sessions and commit ordering. Provider exchanges and pasted-token probes use the shared HTTP
-client supplied by `routers.connections`.
+`application.connect` owns OAuth-start, OAuth-callback, pasted-token, status, resource discovery and
+selection, extra-credential, revoke, health, and provider-companion backfill sessions and commit
+ordering. Provider requests use the shared HTTP client supplied by `routers.connections`.
 
 ## Endpoints
 - **Users / orgs:** `register_user` (`POST /users`, open, legacy — used by the test fixture) creates the

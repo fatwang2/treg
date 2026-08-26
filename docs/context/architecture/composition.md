@@ -26,7 +26,7 @@ related:
 the auth module defines login, session, invite, user-token, OAuth-server, and grant-management blocks;
 the org module defines signup, team-entry, invite-lifecycle, member-management, machine-identity,
 project, policy, settings, usage, and budget blocks; the resources module defines secret, tool, skill,
-and bundle blocks; the connections module defines OAuth and pasted-token establishment blocks; the
+and bundle blocks; the connections module defines connection lifecycle and health blocks; the
 Catalog and web modules define their concern-specific blocks; and the admin
 module defines read, mutation, and report blocks that `api.py`
 appends at their legacy registration points. It then calls the factory once at EOF so the deployed

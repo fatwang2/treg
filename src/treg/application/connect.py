@@ -1,5 +1,6 @@
 """Credential connection workflows and transaction boundaries."""
 
+import asyncio
 import base64
 from dataclasses import dataclass
 from datetime import timedelta
@@ -7,6 +8,7 @@ import json
 import logging
 from urllib.parse import parse_qsl, urlsplit, urlunsplit
 
+from sqlalchemy import or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
@@ -581,3 +583,324 @@ async def get_oauth_status(*, state: str, org_id: int) -> dict:
             "detail": pending.detail,
             "name": pending.name,
         }
+
+
+async def _owned_connection(secret_id: int, org_id: int, db: AsyncSession) -> Secret:
+    secret = (
+        await db.execute(
+            select(Secret).where(Secret.id == secret_id, Secret.org_id == org_id)
+        )
+    ).scalars().first()
+    if secret is None or (secret.kind != "oauth" and not secret.provider):
+        raise ConnectError("unknown_connection", "unknown connection")
+    return secret
+
+
+async def _enrich_resource_labels(provider, resources: list[dict], token: str, client) -> None:
+    """Replace id-only labels with the upstream's human name, in place.
+
+    Runs the lookups concurrently — six sequential round-trips to Google would make the picker feel
+    broken. A row whose lookup fails keeps its id: a partial list beats an error, since the user may
+    not have access to every account the listing returned."""
+    async def one(row: dict) -> None:
+        bare = str(row["id"]).rsplit("/", 1)[-1]
+        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+        if provider.needs_extra_credential:
+            headers[provider.extra_credential_header] = provider.platform_extra_credential
+        if provider.enrich_header_name:
+            headers[provider.enrich_header_name] = provider.enrich_header_value.format(id=bare)
+        try:
+            resp = await client.post(
+                f"{provider.discovery_base.rstrip('/')}{provider.enrich_path.format(id=bare)}",
+                headers=headers, json=provider.enrich_body or {},
+            )
+            if resp.status_code == 200:
+                label = _dig(resp.json(), provider.enrich_label_path)
+                if label:
+                    row["label"] = str(label)
+        except Exception:  # noqa: BLE001 — a naming lookup must never break the picker
+            pass
+
+    await asyncio.gather(*(one(r) for r in resources if r.get("id")))
+
+
+async def list_connections(*, org_id: int) -> list[dict]:
+    async with session_maker() as db:
+        rows = (
+            await db.execute(
+                select(Secret).where(
+                    Secret.org_id == org_id,
+                    # A connection is "something a registry connect produced", NOT "an oauth blob".
+                    # Bring-your-own-token providers (Slack) store a plain string with kind "env", so a
+                    # kind=="oauth" filter created them successfully and then hid them from the list.
+                    or_(Secret.kind == "oauth", Secret.provider != ""),
+                )
+            )
+        ).scalars().all()
+        out = []
+        for s in rows:
+            view = oauth.connection_view(s)
+            provider = oauth_providers.get(s.provider) if s.provider else None
+            if provider is not None:
+                granted = s.granted_scopes.split()
+                have = provider.satisfied_capabilities(granted)
+                view["capabilities"] = have
+                # Providers don't backfill scopes onto an issued grant, so a capability the user never
+                # consented to can only be added by re-consenting. Naming the gap here is what turns an
+                # opaque upstream 403 into "reconnect to enable write".
+                view["missing_capabilities"] = [c for c in provider.capabilities if c not in have]
+                if not provider.extra_credential_is_platform:
+                    view["extra_credential_note"] = provider.extra_credential_note
+                view["extra_credential_label"] = provider.extra_credential_label
+                # Outstanding only while no tool exists for this provider — once one does, the second
+                # credential has been supplied and the connection is callable.
+                if provider.needs_extra_credential and not provider.extra_credential_is_platform:
+                    built = (await db.execute(
+                        select(Tool).where(Tool.org_id == org_id, Tool.name == provider.service)
+                    )).scalars().first()
+                    view["needs_extra_credential"] = built is None
+            out.append(view)
+        out.sort(key=lambda c: (c["provider"] or "~", c["name"]))
+        return out
+
+
+async def list_connection_resources(
+    *, secret_id: int, org_id: int, client_factory,
+) -> dict:
+    async with session_maker() as db:
+        secret = await _owned_connection(secret_id, org_id, db)
+        provider = oauth_providers.get(secret.provider)
+        if provider is None or not provider.supports_discovery:
+            raise ConnectError(
+                "no_resource_discovery",
+                f"{secret.provider or 'this provider'} has nothing to choose between — it acts on your whole account",
+            )
+        client = client_factory()
+        await oauth.ensure_fresh(secret, db, client)  # no-op for a non-oauth secret
+        # A pasted-secret (bot token / API key) secret is a PLAIN STRING, not an oauth blob — json.loads
+        # on it throws. (Only header-auth pasted providers reach here; a query-key provider like Semrush
+        # has nothing to discover, so supports_discovery is False and this endpoint 422s earlier.)
+        raw = crypto.decrypt(secret.value)
+        if provider.uses_pasted_secret:
+            disc_headers = {provider.token_header: provider.token_format.format(secret=raw)}
+        else:
+            blob = json.loads(raw)
+            token = blob.get("access_token") or blob.get("token")
+            disc_headers = {"Authorization": f"Bearer {token}"}
+        if provider.needs_extra_credential:  # Ads won't list accounts without the developer token
+            disc_headers[provider.extra_credential_header] = provider.platform_extra_credential
+        resp = await client.get(
+            f"{provider.discovery_base.rstrip('/')}{provider.discover_path}",
+            headers=disc_headers,
+        )
+        body = {}
+        try:
+            body = resp.json()
+        except Exception:  # noqa: BLE001
+            body = {}
+        # Slack answers 200 with {"ok": false, "error": "missing_scope"} — status alone would report an
+        # empty picker instead of naming the scope the bot is missing.
+        if resp.status_code >= 400 or body.get("ok") is False:
+            upstream = ""
+            err = body.get("error")
+            if isinstance(err, dict):
+                upstream = err.get("message", "")
+            elif isinstance(err, str):
+                upstream = err
+            if not upstream:
+                upstream = (resp.text or "")[:200]
+            raise ConnectError(
+                "resource_discovery_failed",
+                f"could not list {provider.resource_plural} ({resp.status_code}): {upstream}".strip(),
+            )
+        # A successful discovery call is a real authenticated request to the upstream — the strongest
+        # evidence we get that this credential works. Recording it turns the connection's health from
+        # "unknown" into something earned, instead of waiting for the next health sweep.
+        if secret.health_status != "ok":
+            secret.health_status, secret.health_detail = "ok", "listed upstream resources"
+            secret.health_checked_at = _utcnow_naive()
+            await db.commit()
+        rows = body.get(provider.discover_key) or []
+        if provider.discover_nested_key:  # e.g. GA4 properties nested inside each account summary
+            rows = [n for r in rows if isinstance(r, dict) for n in (r.get(provider.discover_nested_key) or [])]
+        # Business-owned assets (Meta): a second listing whose rows hold nested lists of
+        # primary-shaped rows — an agency member sees [] from /me/accounts yet manages everything
+        # through their Business portfolio. Best-effort by design: the primary listing has already
+        # answered, and a connection that consented before business_management existed in our scopes
+        # gets a clean permission error here, which must read as "no extra assets", not a 502.
+        if provider.discover_extra_path:
+            try:
+                extra = await client.get(
+                    f"{provider.discovery_base.rstrip('/')}{provider.discover_extra_path}",
+                    headers=disc_headers,
+                )
+                if extra.status_code < 400:
+                    for holder in (extra.json().get(provider.discover_key) or []):
+                        for path in provider.discover_extra_list_paths:
+                            rows.extend(n for n in (_dig(holder, path) or []) if isinstance(n, dict))
+            except Exception:  # noqa: BLE001 — the extra listing must never break the picker
+                pass
+        label_field = provider.discover_label_field or provider.discover_id_field
+        resources = [
+            # A row is usually an object, but some providers return bare strings — Google Ads'
+            # listAccessibleCustomers gives ["customers/6186675831", …]. Treat the string as both id
+            # and label rather than silently dropping every row.
+            {"id": r, "label": r.rsplit("/", 1)[-1], "raw": r} if isinstance(r, str)
+            # _dig, not .get — YouTube's channel title is nested at snippet.title. A plain key is just
+            # a one-hop path, so every existing provider walks the same code.
+            else {"id": _dig(r, provider.discover_id_field), "label": _dig(r, label_field), "raw": r}
+            for r in rows if isinstance(r, (dict, str))
+        ]
+        if provider.discover_extra_path:
+            # A directly-managed Page is usually ALSO owned by a Business, so the two listings
+            # overlap — keep the first sighting (the primary listing's). Id-less rows go too: a
+            # Business-owned Page with no linked Instagram account digs to id None, and one None
+            # would survive dedup as a phantom picker row.
+            seen: set = set()
+            resources = [x for x in resources if x["id"] and not (x["id"] in seen or seen.add(x["id"]))]
+        if provider.supports_enrichment:
+            await _enrich_resource_labels(provider, resources, token, client)
+        # Self-heal a connection whose target was chosen before we stored labels (or via the API, which
+        # has no label to give). We're already holding the upstream's own naming — resolving it here
+        # spares the user a pointless re-pick just to make the row readable.
+        if secret.resource_ref and not secret.resource_name:
+            match = next((x for x in resources if x["id"] == secret.resource_ref), None)
+            if match and match["label"]:
+                secret.resource_name = match["label"]
+                await db.commit()
+        return {
+            "provider": provider.service,
+            "resource_label": provider.resource_label,
+            "resource_plural": provider.resource_plural,
+            "selected": secret.resource_ref,
+            "resources": resources,
+        }
+
+
+async def select_connection_resource(
+    *, secret_id: int, resource_ref: str, resource_name: str, org_id: int,
+) -> dict:
+    async with session_maker() as db:
+        secret = await _owned_connection(secret_id, org_id, db)
+        secret.resource_ref = resource_ref
+        secret.resource_name = resource_name
+        # Picking a property/site/account is the moment we finally KNOW the id every real call needs —
+        # so render it straight into the provisioned tool's examples as a ready-made call. Before this,
+        # agents went hunting for the id through the vendor's admin API mid-task (GA4: 13 calls/7 orgs
+        # dead-ended there). Re-picking replaces the stamped example rather than piling them up.
+        provider = oauth_providers.get(secret.provider) if secret.provider else None
+        tmpl = getattr(provider, "resource_example", None) if provider else None
+        if tmpl and resource_ref:
+            rendered = {
+                k: v.replace("{resource}", resource_ref)
+                    .replace("{resource_name}", resource_name or resource_ref)
+                if isinstance(v, str) else v
+                for k, v in tmpl.items()
+            }
+            # The marker is what makes re-picking REPLACE: a stamp for property A and one for property B
+            # share no path, so path-matching would let them pile up, one stale and confidently wrong.
+            rendered["stamped"] = "resource"
+            tool = (await db.execute(select(Tool).where(
+                Tool.org_id == org_id, Tool.name == (secret.name or provider.service)
+            ))).scalars().first()
+            if tool is not None:
+                others = [e for e in (tool.examples or [])
+                          if e.get("stamped") != "resource" and e.get("path") != tmpl["path"]]
+                tool.examples = [rendered] + others
+        await db.commit()
+        await db.refresh(secret)
+        return oauth.connection_view(secret)
+
+
+async def supply_extra_credential(
+    *, secret_id: int, value: str, org_id: int, owner: str,
+) -> dict:
+    async with session_maker() as db:
+        secret = await _owned_connection(secret_id, org_id, db)
+        provider = oauth_providers.get(secret.provider)
+        if provider is None or not provider.needs_extra_credential:
+            raise ConnectError("no_extra_credential", "this provider needs no extra credential")
+        value = value.strip()
+        if not value:
+            raise ConnectError("extra_credential_required", f"{provider.extra_credential_label} is required")
+
+        name = f"{provider.service}-{provider.extra_credential_header}"
+        extra = (await db.execute(
+            select(Secret).where(Secret.org_id == org_id, Secret.name == name)
+        )).scalars().first()
+        if extra is None:
+            extra = Secret(org_id=org_id, name=name, owner=owner, kind="env",
+                           value=crypto.encrypt(value))
+            db.add(extra)
+            await db.flush()
+        else:  # re-supplying replaces it — the usual reason is a rotated token
+            extra.value = crypto.encrypt(value)
+
+        # The primary binding must match how THIS provider authenticates — OAuth bearer for Google Ads,
+        # but a pasted-key provider (Tomba's X-Tomba-Key + X-Tomba-Secret pair) injects a plain header.
+        # Hardcoding the OAuth shape here gave a key provider a binding that JSON-parses a bare key and
+        # fails on every call, so build the primary half with the same helper the connect flow uses.
+        bindings = _provider_bindings(provider, secret) + [
+            {"secret_id": extra.id, "injector": "env", "location": "header",
+             "name": provider.extra_credential_header, "format": "{secret}"},
+        ]
+        tool = (await db.execute(
+            select(Tool).where(Tool.org_id == org_id, Tool.name == provider.service)
+        )).scalars().first()
+        if tool is None:
+            tool = Tool(org_id=org_id, name=provider.service, owner=owner,
+                        base_url=provider.base_url, host=_host_of(provider.base_url), bindings=bindings)
+            db.add(tool)
+        else:
+            tool.bindings = bindings
+        await db.commit()
+        await db.refresh(secret)
+        return {**oauth.connection_view(secret), "tool": provider.service, "ready": True}
+
+
+async def revoke_connection(*, secret_id: int, org_id: int) -> dict:
+    async with session_maker() as db:
+        secret = await _owned_connection(secret_id, org_id, db)
+        provider_service = secret.provider
+        removed_tools: list[str] = []
+
+        tools = (await db.execute(select(Tool).where(Tool.org_id == org_id))).scalars().all()
+        for tool in tools:
+            bindings = [b for b in (tool.bindings or []) if b.get("secret_id") != secret_id]
+            if len(bindings) == len(tool.bindings or []):
+                continue  # this tool never used the credential
+            if tool.name == provider_service or not bindings:
+                await db.delete(tool)  # treg's own auto-provisioned tool, or nothing left to inject
+                removed_tools.append(tool.name)
+            else:
+                tool.bindings = bindings  # a user-built tool keeps its other credentials
+
+        await db.delete(secret)
+        await db.commit()
+        return {"deleted": secret_id, "removed_tools": removed_tools}
+
+
+async def run_connection_health(
+    *, all_orgs: bool, is_superadmin: bool, org_id: int, client_factory,
+) -> dict:
+    async with session_maker() as db:
+        # On-demand + Render-Cron trigger. Refreshes oauth tokens, probes tools, alerts owners.
+        # Scoped to the caller's org so a member only ever probes/sees their own org's credentials —
+        # EXCEPT a super-admin may pass ?all_orgs=1 to sweep EVERY org (so a single Render Cron token can
+        # validate the whole platform, not just its own org).
+        if all_orgs:
+            if not is_superadmin:
+                raise ConnectError("all_orgs_forbidden", "all_orgs requires super-admin")
+            return await health.run_all(db, client_factory(), org_id=None)
+        return await health.run_all(db, client_factory(), org_id=org_id)
+
+
+async def list_connection_health(*, org_id: int, visible_ids_for) -> list[dict]:
+    async with session_maker() as db:
+        rows = (await db.execute(select(Secret).where(Secret.org_id == org_id))).scalars().all()
+        visible = await visible_ids_for(db)
+        if visible is not None:  # same visibility rule as /secrets — health mustn't leak hidden keys
+            rows = [s for s in rows if s.id in visible]
+        # health.needs_reconnect rides along so a credential treg cannot renew announces itself BEFORE
+        # it dies. Nothing else surfaces that: it probes green until the moment it stops working.
+        return [{**health._view(s), "needs_reconnect": health.needs_reconnect(s)} for s in rows]

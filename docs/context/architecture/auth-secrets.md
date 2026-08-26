@@ -68,8 +68,9 @@ hit it live). Now the method rides in the blob and `refresh()` honors it; a lega
 field gets body auth, then ONE retry with Basic on a 4xx, and stamps whichever worked — existing
 broken connections self-heal on their next call, no migration.
 
-**Connect flow (mint the first token):** `application.connect` owns connection-establishment sessions
-and commit ordering, while `routers.connections` translates HTTP input and framework-neutral outcomes.
+**Connect lifecycle:** `application.connect` owns establishment, resource discovery and selection,
+extra-credential, revoke, and health sessions and commit ordering. `routers.connections` translates
+HTTP input and framework-neutral outcomes.
 `consent_url(pending)` builds the provider consent URL
 (default `access_type=offline` + `prompt=consent` so a refresh token comes back); `exchange_code(pending,
 code, client)` trades the auth code for tokens and returns a self-refreshable blob. Both honor
