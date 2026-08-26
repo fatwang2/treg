@@ -54,7 +54,13 @@ from . import adsconv, agent_pages, analytics, audit, billing, catalog_store, cr
 from . import oauth_providers
 from . import pubfeed, ratestore, reconcile, referrals, runner, sandbox as demo_sandbox
 from .config import LEGACY_PUBLIC_HOSTS, PUBLIC_HOST_ALIASES, get_settings, platform_setting_name
-from .caller_metadata import _client_of, _norm_client
+from .caller_metadata import (
+    TAG_DEFAULT,
+    _MAX_BUDGET_DIMS,
+    _META_KEY_RE,
+    _client_of,
+    _norm_client,
+)
 from .db import get_session, session_maker
 from .domain.identity import session as sess
 from .domain.identity.access import (
@@ -204,44 +210,69 @@ from .routers.orgs import (
     AccessIn,
     AgentIn,
     CapIn,
+    DenyRuleIn,
     InviteIn,
     OrgIn,
+    OrgSettingsIn,
+    PROXY_METHODS,
+    ProjectIn,
     RoleIn,
+    TagBudgetIn,
     UserIn,
     _LANDING_RE,
     _ORG_SCOPED_MODELS,
     _cascade_delete_org,
     _count_owners,
     _day_start_utc,
+    _deny_match,
+    _deny_view,
     _drop_member_deny_rules,
+    _enforce_deny,
     _known_access_names,
     _known_tool_names,
     _normalize_project_access,
     _normalize_tool_access,
+    _org_deny_rules,
     _agent_email,
     _agent_name,
     _public_demo_email,
+    _project_view,
     _require_admin_of,
     _require_owner_of,
+    _resolve_project,
+    _tag_budget_view,
+    _usage_rollup,
     _used_today_by_user,
     accept_invite,
     accept_my_invite,
     agent_checkin,
     create_agent,
+    create_deny_rule,
     create_invite,
     create_org,
+    create_project,
     create_public_token,
     count_today,
     delete_org,
+    delete_deny_rule,
+    delete_project,
     delete_public_token,
+    delete_tag_budget,
+    get_org_settings,
     leave_org,
     list_invites,
     list_agents,
+    list_cli_deny,
+    list_deny_rules,
     list_members,
     list_observed_agents,
     list_orgs,
+    list_projects,
+    list_tag_budgets,
+    list_tag_keys,
     my_usage,
     my_invites,
+    org_usage,
     register_user,
     remove_member,
     revoke_agent,
@@ -249,6 +280,10 @@ from .routers.orgs import (
     set_member_access,
     set_member_cap,
     set_member_role,
+    set_org_settings,
+    set_tag_budget,
+    set_tag_default,
+    usage_by_tag,
 )
 from .routers.auth_helpers import (
     OAUTH_RETURN_COOKIE,
@@ -818,65 +853,10 @@ def _require_tool_use(caller: Caller, tool: Tool) -> None:
             "(dashboard → Team, or `treg org access <you> --projects …`)"))
 
 
-def _deny_match(rules: list[DenyRule], host: str, path: str, method: str) -> DenyRule | None:
-    """The FIRST rule that matches — pure, so it unit-tests without a DB (like `localrun.check_deny`).
-
-    An empty field on a rule means "any", so `{method: "DELETE"}` blocks every delete and
-    `{host: "api.stripe.com"}` blocks that upstream entirely. Host is compared case-insensitively;
-    the path match is a prefix, anchored at `/` so `/v1/charges` cannot be dodged by `/v1/chargesX`.
-    """
-    host, method = host.lower(), method.upper()
-    path = path or "/"
-    for r in rules:
-        if r.host and r.host.lower() != host:
-            continue
-        if r.method and r.method.upper() != method:
-            continue
-        if r.path_prefix:
-            p = (r.path_prefix if r.path_prefix.startswith("/") else "/" + r.path_prefix).rstrip("/")
-            # Anchored at a segment boundary: `/v1/charges` must NOT match `/v1/chargesX`.
-            if not (path == p or path.startswith(p + "/")):
-                continue
-        return r
-    return None
 
 
-async def _org_deny_rules(caller: Caller, db: AsyncSession) -> list[DenyRule]:
-    """This caller's applicable rules: the org-wide ones plus the ones aimed at them specifically."""
-    return list((await db.execute(select(DenyRule).where(
-        DenyRule.org_id == caller.org_id,
-        or_(DenyRule.user_id.is_(None), DenyRule.user_id == caller.membership.user_id),
-    ))).scalars().all())
 
 
-async def _enforce_deny(
-    caller: Caller, url: str, method: str, db: AsyncSession, tool_project_id: int | None = None
-) -> None:
-    """Block a call the org's policy forbids. Deliberately applies to EVERY role including owner: a
-    deny rule is a guardrail, not a permission tier — an owner who disagrees deletes the rule rather
-    than quietly bypassing it. The refusal names the rule, mirroring `localrun.check_deny`'s
-    "a refusal can name its source".
-
-    `tool_project_id` = the project of the tool this call goes through (every enforcement point has
-    resolved a Tool by then). A project-scoped rule (`project_id` set) fires only on that project's
-    tools; an org-wide-tool call (`tool_project_id` None) is never caught by one."""
-    rules = [r for r in await _org_deny_rules(caller, db)
-             if r.project_id is None or r.project_id == tool_project_id]
-    if not rules:
-        return  # the common path costs one indexed query and nothing else
-    try:
-        parts = urlsplit(url)
-    except ValueError:
-        return
-    rule = _deny_match(rules, parts.netloc, parts.path, method)
-    if rule is None:
-        return
-    why = f" ({rule.note})" if rule.note else ""
-    scope = "this team" if rule.user_id is None else "you"
-    in_proj = " in this project" if rule.project_id is not None else ""
-    raise HTTPException(status_code=403, detail=(
-        f"blocked by a policy rule on {scope}{in_proj}{why} — "
-        f"{rule.method or 'any'} {rule.host or 'any host'}{rule.path_prefix or ''}"))
 
 
 async def _visible_secret_ids(caller: Caller, db: AsyncSession) -> set[int] | None:
@@ -1166,52 +1146,6 @@ async def _enforce_daily_cap(caller: Caller, db: AsyncSession) -> None:
 
 
 
-async def _usage_rollup(db: AsyncSession, org_id: int, since: datetime) -> dict:
-    """Aggregate usage since `since` into by-user (with a per-kind split), by-tool, by-day, and totals.
-    CallRecord carries `kind` ("call"/"local_run"); every RunRecord is a "server_run". Pure GROUP BY —
-    no request/response bodies are read (we don't store them). See docs/USAGE-METERING-PLAN.md."""
-    KINDS = ("call", "local_run", "server_run")
-    totals = {k: 0 for k in KINDS}
-    users: dict[str, dict] = {}
-
-    def _bump(email: str, kind: str, n: int) -> None:
-        u = users.setdefault(email, {"user_email": email, **{k: 0 for k in KINDS}})
-        u[kind] += n
-        totals[kind] += n
-
-    for email, kind, n in (await db.execute(select(CallRecord.user_email, CallRecord.kind, func.count()).where(
-            CallRecord.org_id == org_id, CallRecord.created_at >= since
-    ).group_by(CallRecord.user_email, CallRecord.kind))).all():
-        _bump(email, kind if kind in KINDS else "call", n)  # guard an unexpected kind into "call"
-    for email, n in (await db.execute(select(RunRecord.user_email, func.count()).where(
-            RunRecord.org_id == org_id, RunRecord.created_at >= since).group_by(RunRecord.user_email))).all():
-        _bump(email, "server_run", n)
-
-    by_user = sorted(
-        ({**u, "total": sum(u[k] for k in KINDS)} for u in users.values()),
-        key=lambda r: -r["total"])
-    totals["total"] = sum(totals[k] for k in KINDS)
-
-    tools: dict[str, int] = {}
-    for name, n in (await db.execute(select(CallRecord.tool_name, func.count()).where(
-            CallRecord.org_id == org_id, CallRecord.created_at >= since).group_by(CallRecord.tool_name))).all():
-        tools[name] = tools.get(name, 0) + n
-    for name, n in (await db.execute(select(RunRecord.bundle_name, func.count()).where(
-            RunRecord.org_id == org_id, RunRecord.created_at >= since).group_by(RunRecord.bundle_name))).all():
-        tools[name] = tools.get(name, 0) + n
-    by_tool = sorted(({"name": k, "total": v} for k, v in tools.items()), key=lambda r: -r["total"])
-
-    days: dict[str, int] = {}  # func.date() → 'YYYY-MM-DD' on sqlite, a date on Postgres; str() both
-    for tbl in (CallRecord, RunRecord):
-        for d, n in (await db.execute(select(func.date(tbl.created_at), func.count()).where(
-                tbl.org_id == org_id, tbl.created_at >= since).group_by(func.date(tbl.created_at)))).all():
-            days[str(d)] = days.get(str(d), 0) + n
-    by_day = sorted(({"day": k, "total": v} for k, v in days.items()), key=lambda r: r["day"])
-
-    # What those calls COST the team on treg's own keys — read from the ledger (the authority on money)
-    # rather than from the audit rows, which are fire-and-forget and may be incomplete. One aggregate.
-    spend = await ledger.spend_since(db, org_id, since)
-    return {"totals": totals, "by_user": by_user, "by_tool": by_tool, "by_day": by_day, "spend": spend}
 
 
 @app.post("/demo/sandbox")
@@ -1351,18 +1285,7 @@ router.routes.extend(org_routes.invite_management_router.routes)
 router.routes.extend(org_routes.member_list_router.routes)
 
 
-@app.get("/orgs/{org_id}/usage")
-async def org_usage(
-    org_id: int, days: int = 30,
-    caller: Caller = Depends(require_member), db: AsyncSession = Depends(get_session),
-) -> dict:
-    """Usage rollups for an org over the last `days` (admin/owner): by user (with a call/local/server
-    split), by tool, by day, and totals — counts only, no request/response bodies. Powers the dashboard
-    Usage view."""
-    _require_admin_of(org_id, caller)
-    days = max(1, min(days, 365))
-    since = _day_start_utc() - timedelta(days=days - 1)  # inclusive of today + the prior days-1
-    return {"days": days, "since": since.isoformat(), **await _usage_rollup(db, org_id, since)}
+router.routes.extend(org_routes.org_usage_router.routes)
 
 
 @app.get("/orgs/{org_id}/balance")
@@ -1423,247 +1346,7 @@ async def org_balance(
     }
 
 
-@app.get("/orgs/{org_id}/tag-keys")
-async def list_tag_keys(
-    org_id: int, caller: Caller = Depends(require_member), db: AsyncSession = Depends(get_session),
-) -> dict:
-    """Every tag key this team has actually SENT, plus the ones it may budget on.
-
-    Two different questions that had been given one answer. Reporting works on ANY key — the money
-    for an undeclared one is folded in Python — while ENFORCEMENT only works on a declared key,
-    because it needs an index. Feeding a reporting picker the declared list hid `feature=` and
-    friends from the dashboard even though the API served them fine.
-    """
-    _require_admin_of(org_id, caller)
-    seen = (await db.execute(
-        select(TagSpend.dim).where(TagSpend.org_id == org_id).distinct())).scalars().all()
-    declared = _budget_dims_of(caller.org)
-    return {"seen": sorted(set(seen)), "budgetable": declared,
-            "primary": _primary_dim_of(caller)}
-
-
-@app.get("/orgs/{org_id}/usage/by-tag")
-async def usage_by_tag(
-    org_id: int, key: str | None = None, days: int = 30,
-    caller: Caller = Depends(require_member), db: AsyncSession = Depends(get_session),
-) -> dict:
-    """What each value of one tag consumed — the numbers a reselling builder invoices from.
-
-    MONEY COMES FROM THE LEDGER, never from `CallRecord`. Audit rows are fire-and-forget and the queue
-    sheds them under load, which is precisely the traffic a successful builder generates; an invoice
-    built on them would under-bill silently and unrecoverably. Call COUNTS come from the audit table,
-    where losing a row costs a slightly low count and nothing else.
-
-    `unattributed` is reported explicitly rather than dropped. A builder reconciling this against their
-    own ledger has to see the spend they cannot attribute to anyone — silently omitting it is how the
-    two sets of books stop agreeing without anybody noticing.
-    """
-    _require_admin_of(org_id, caller)
-    days = max(1, min(days, 365))
-    since = _day_start_utc() - timedelta(days=days - 1)
-    dim = (key or _primary_dim_of(caller)).strip().lower()
-
-    by_value = await ledger.spend_by_tag(db, org_id, dim, since)
-    org_total = (await ledger.spend_since(db, org_id, since))["spend_micro"]
-    # Counts come from the tag rows too. `CallRecord` holds only the primary dimension, so counting
-    # there reported 0 for every non-primary key while the money column was correct — a report that
-    # disagrees with itself is worse than one that admits its grain.
-    counts = await ledger.calls_by_tag(db, org_id, dim, since)
-    rows = [{"value": val, "charged_micro": micro, "charged_usd": ledger.usd(micro),
-             "calls": int(counts.get(val, 0))}
-            for val, micro in sorted(by_value.items(), key=lambda kv: -kv[1])]
-    attributed = sum(by_value.values())
-    return {
-        "key": dim, "days": days, "since": since.isoformat(),
-        "rows": rows,
-        # The identity a builder's invoice rests on: these three reconcile against the team's own
-        # settled spend for the window, whichever dimension they slice by.
-        "attributed_micro": attributed,
-        "unattributed_micro": org_total - attributed,
-        "total_micro": org_total, "total_usd": ledger.usd(org_total),
-    }
-
-
-# ---- team settings: the spend ceiling and the tag dimensions ---------------------------------
-class OrgSettingsIn(BaseModel):
-    daily_cap_micro: int | None = None
-    budget_dims: list[str] | None = None
-    primary_dim: str | None = None
-
-
-@app.get("/orgs/{org_id}/settings")
-async def get_org_settings(
-    org_id: int, caller: Caller = Depends(require_member), db: AsyncSession = Depends(get_session),
-) -> dict:
-    """The team's spend ceiling and tag configuration. Readable by any member — a limit nobody can see
-    is a limit that turns into a support ticket the first time an agent trips it."""
-    if caller.org_id != org_id:
-        raise HTTPException(status_code=403, detail="not your org")
-    org = caller.org
-    return {"daily_cap_micro": _effective_daily_cap(org),
-            "daily_cap_set_by_team": int(org.daily_cap_micro or 0) or None,
-            "platform_ceiling_micro": get_settings().platform_daily_cap_micro,
-            "budget_dims": _budget_dims_of(org), "primary_dim": _primary_dim_of(caller)}
-
-
-@app.patch("/orgs/{org_id}/settings")
-async def set_org_settings(
-    org_id: int, body: OrgSettingsIn,
-    caller: Caller = Depends(require_member), db: AsyncSession = Depends(get_session),
-) -> dict:
-    """Set the team's own spend ceiling and which tag keys carry budgets. Admin+.
-
-    A team may LOWER its ceiling freely; raising it past the platform ceiling is refused rather than
-    silently clamped, because a builder who thinks they set $500/day and actually got $5 discovers it
-    as an outage in the middle of their launch.
-    """
-    _require_admin_of(org_id, caller)
-    org = caller.org
-    sent = body.model_fields_set
-    if "daily_cap_micro" in sent and body.daily_cap_micro is not None:
-        ceiling = get_settings().platform_daily_cap_micro
-        if body.daily_cap_micro < 0:
-            raise HTTPException(status_code=422, detail="daily_cap_micro must be 0 or more")
-        if body.daily_cap_micro > ceiling:
-            raise HTTPException(status_code=403, detail={
-                "error": "above_platform_ceiling", "requested_micro": body.daily_cap_micro,
-                "ceiling_micro": ceiling,
-                "message": (f"${ledger.usd(ceiling):g}/day is the ceiling we allow for a team. Ask us "
-                            f"to raise it — reselling volume is a conversation, not a setting."),
-            })
-        org.daily_cap_micro = body.daily_cap_micro
-    if "budget_dims" in sent and body.budget_dims is not None:
-        dims = [d.strip().lower() for d in body.budget_dims if d and d.strip()]
-        if len(dims) > _MAX_BUDGET_DIMS:
-            raise HTTPException(status_code=422, detail=(
-                f"at most {_MAX_BUDGET_DIMS} budget dimensions — each one is an indexed lookup on "
-                f"every call and a row per distinct value"))
-        for d in dims:
-            if not _META_KEY_RE.match(d):
-                raise HTTPException(status_code=422, detail=f"{d!r} is not a valid tag key")
-        org.budget_dims = dims or None
-    if "primary_dim" in sent and body.primary_dim:
-        if not _META_KEY_RE.match(body.primary_dim):
-            raise HTTPException(status_code=422, detail=f"{body.primary_dim!r} is not a valid tag key")
-        org.primary_dim = body.primary_dim
-    await db.commit()
-    return await get_org_settings(org_id, caller, db)
-
-
-# ---- per-tag budgets: what a reselling builder sets on THEIR users ---------------------------
-class TagBudgetIn(BaseModel):
-    daily_cap_micro: int | None = None
-    monthly_cap_micro: int | None = None
-    calls_per_day: int | None = None
-    status: str | None = None
-    note: str | None = None
-
-
-def _tag_budget_view(row: TagBudget) -> dict:
-    return {"dim": row.dim, "val": row.val, "is_default": row.val == TAG_DEFAULT,
-            "daily_cap_micro": row.daily_cap_micro,
-            "monthly_cap_micro": row.monthly_cap_micro, "calls_per_day": row.calls_per_day,
-            "status": row.status, "note": row.note,
-            "updated_at": row.updated_at.isoformat() if row.updated_at else None}
-
-
-@app.get("/orgs/{org_id}/budgets")
-async def list_tag_budgets(
-    org_id: int, dim: str | None = None,
-    caller: Caller = Depends(require_member), db: AsyncSession = Depends(get_session),
-) -> list[dict]:
-    """Every per-tag limit this team has SET — the per-dimension defaults plus the overrides.
-
-    Registry rows are excluded. One is created per distinct value so the cardinality check stays a
-    cheap lookup, and listing them made a table of eight rows in which six limited nothing: the
-    bookkeeping was being presented as if it were policy.
-
-    Admin+, because a budget names the team's customers.
-    """
-    _require_admin_of(org_id, caller)
-    q = select(TagBudget).where(TagBudget.org_id == org_id, TagBudget.auto.is_(False))
-    if dim:
-        q = q.where(TagBudget.dim == dim)
-    rows = (await db.execute(q.order_by(TagBudget.dim, TagBudget.val))).scalars().all()
-    # Defaults first within each dimension — they are what everything else is an exception to.
-    rows.sort(key=lambda r: (r.dim, r.val != TAG_DEFAULT, r.val))
-    return [_tag_budget_view(r) for r in rows]
-
-
-@app.put("/orgs/{org_id}/budgets/{dim}")
-async def set_tag_default(
-    org_id: int, dim: str, body: TagBudgetIn,
-    caller: Caller = Depends(require_member), db: AsyncSession = Depends(get_session),
-) -> dict:
-    """Set the DEFAULT limit for a whole dimension — what every value inherits without an override.
-
-    Unlimited until this is set: a team that never calls it behaves exactly as before. Changing it
-    takes effect on the next call for everyone without an override, since resolution happens per
-    call — so lowering a default is a live change across the whole customer base.
-    """
-    return await set_tag_budget(org_id, dim, TAG_DEFAULT, body, caller, db)
-
-
-@app.put("/orgs/{org_id}/budgets/{dim}/{val}")
-async def set_tag_budget(
-    org_id: int, dim: str, val: str, body: TagBudgetIn,
-    caller: Caller = Depends(require_member), db: AsyncSession = Depends(get_session),
-) -> dict:
-    """Set (or update) one limit — `PUT /orgs/1/budgets/customer/cust_8123 {"daily_cap_micro": 5000000}`.
-
-    An UPSERT that leaves unsent fields alone, the same `model_fields_set` shape `create_agent` uses:
-    a PUT that only flips `status` must not silently wipe the caps someone set last week.
-    """
-    _require_admin_of(org_id, caller)
-    if not _META_KEY_RE.match(dim):
-        raise HTTPException(status_code=422, detail=f"{dim!r} is not a valid tag key")
-    if val != TAG_DEFAULT:
-        _validate_tag_pair(dim, val)  # same rule as the call path — this value becomes a storage key
-    declared = _budget_dims_of(caller.org)
-    if dim not in declared:
-        # Setting a limit IS the declaration. Requiring a separate PATCH first made the common path a
-        # hidden two-step: the tag shows up in usage reports, so a person reasonably expects to be
-        # able to cap it, and got a 422 telling them to go configure something else first.
-        #
-        # The BOUND still holds, because it is what keeps the call path cheap — each declared
-        # dimension is another indexed lookup on every proxied call and another row per value. Past
-        # the limit, refuse and say which ones are in use, since only the team knows which to drop.
-        if len(declared) >= _MAX_BUDGET_DIMS:
-            raise HTTPException(status_code=422, detail={
-                "error": "too_many_budget_dimensions", "dim": dim, "declared": declared,
-                "limit": _MAX_BUDGET_DIMS,
-                "message": (f"budgets are already set up on {', '.join(declared)} — {_MAX_BUDGET_DIMS} "
-                            f"is the limit, because each one is checked on every call. Remove one "
-                            f"first if you want to budget on {dim!r} instead."),
-            })
-        caller.org.budget_dims = [*declared, dim]
-        declared = caller.org.budget_dims
-    if body.status is not None and body.status not in ("active", "blocked"):
-        raise HTTPException(status_code=422, detail="status must be 'active' or 'blocked'")
-    row = await _tag_budget(db, org_id, dim, val, create=True)
-    row.auto = False  # a human set this: it is policy now, not registry bookkeeping
-    sent = body.model_fields_set
-    for field in ("daily_cap_micro", "monthly_cap_micro", "calls_per_day", "status", "note"):
-        if field in sent:
-            setattr(row, field, getattr(body, field))
-    row.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
-    await db.commit()
-    return _tag_budget_view(row)
-
-
-@app.delete("/orgs/{org_id}/budgets/{dim}/{val}")
-async def delete_tag_budget(
-    org_id: int, dim: str, val: str,
-    caller: Caller = Depends(require_member), db: AsyncSession = Depends(get_session),
-) -> dict:
-    """Drop a limit. The tag keeps being recorded and invoiced — only the ceiling goes away."""
-    _require_admin_of(org_id, caller)
-    row = await _tag_budget(db, org_id, dim, val)
-    if row is None:
-        raise HTTPException(status_code=404, detail="no budget for that tag")
-    await db.delete(row)
-    await db.commit()
-    return {"deleted": {"dim": dim, "val": val}}
+router.routes.extend(org_routes.tag_controls_router.routes)
 
 
 # ---- billing: Stripe top-ups (see billing.py) -----------------------------------------------
@@ -1891,134 +1574,16 @@ router.routes.extend(org_routes.machine_identity_router.routes)
 
 
 # ---- projects: an optional sub-scope inside an org ------------------------------------------
-class ProjectIn(BaseModel):
-    name: str
-
-
-def _project_view(p: Project, tool_count: int | None = None) -> dict:
-    out = {"id": p.id, "name": p.name, "slug": p.slug, "created_by": p.created_by,
-           "created_at": p.created_at}
-    if tool_count is not None:
-        out["tool_count"] = tool_count
-    return out
-
-
-
-
-async def _resolve_project(ref: str | int | None, org_id: int, db: AsyncSession) -> Project | None:
-    """A project by slug or id, scoped to the org (404 across orgs). None/'' = org-wide."""
-    if ref is None or ref == "":
-        return None
-    q = select(Project).where(Project.org_id == org_id)
-    if isinstance(ref, int) or (isinstance(ref, str) and str(ref).isdigit()):
-        q = q.where(Project.id == int(ref))
-    else:
-        q = q.where(Project.slug == _slugify(str(ref)))
-    project = (await db.execute(q)).scalar_one_or_none()
-    if project is None:
-        raise HTTPException(status_code=404, detail=f"no project {ref!r} in this team")
-    return project
-
-
-@app.post("/orgs/{org_id}/projects")
-async def create_project(
-    org_id: int, body: ProjectIn,
-    caller: Caller = Depends(require_member), db: AsyncSession = Depends(get_session),
-) -> dict:
-    """Create a project — a sub-scope inside the team (admin+). Tools can then be filed under it and
-    members scoped to it. Creating one changes nothing on its own: existing tools stay org-wide."""
-    _require_admin_of(org_id, caller)
-    name = (body.name or "").strip()
-    slug = _slugify(name)
-    if not name or not slug:
-        raise HTTPException(status_code=422, detail="name is required")
-    if (await db.execute(select(Project).where(
-            Project.org_id == org_id, Project.slug == slug))).scalar_one_or_none():
-        raise HTTPException(status_code=409, detail=f"a project {slug!r} already exists in this team")
-    project = Project(org_id=org_id, name=name, slug=slug, created_by=caller.email)
-    db.add(project)
-    await db.commit()
-    await db.refresh(project)
-    return _project_view(project, tool_count=0)
-
-
-@app.get("/orgs/{org_id}/projects")
-async def list_projects(
-    org_id: int, caller: Caller = Depends(require_member), db: AsyncSession = Depends(get_session)
-) -> list[dict]:
-    """The team's projects. A member scoped to some of them sees only those (the ACL hides what it
-    gates, matching how `list_tools` behaves)."""
-    if caller.org_id != org_id:
-        raise HTTPException(status_code=403, detail="use this team's token")
-    projects = (await db.execute(select(Project).where(Project.org_id == org_id))).scalars().all()
-    access = caller.membership.project_access
-    if caller.role != "owner" and access is not None:
-        projects = [p for p in projects if p.id in access]
-    counts = dict((await db.execute(
-        select(Tool.project_id, func.count(Tool.id)).where(Tool.org_id == org_id).group_by(Tool.project_id)
-    )).all())
-    return [_project_view(p, tool_count=counts.get(p.id, 0)) for p in projects]
-
-
-@app.delete("/orgs/{org_id}/projects/{project_id}")
-async def delete_project(
-    org_id: int, project_id: int,
-    caller: Caller = Depends(require_member), db: AsyncSession = Depends(get_session),
-) -> dict:
-    """Delete a project. Its tools are NOT deleted — they fall back to org-wide, which is the safe
-    direction (a tool that quietly vanished from every listing would be far worse than one that
-    briefly becomes visible to the whole team). Members scoped to it lose that entry.
-
-    The freed tools are what keeps a scoped member from being locked out: they were the member's only
-    tools and they are now org-wide, so the member keeps exactly what they had. The scope list itself
-    must NOT be widened to do that (see below)."""
-    _require_admin_of(org_id, caller)
-    project = await db.get(Project, project_id)
-    if project is None or project.org_id != org_id:  # 404 across orgs — never confirm another org's ids
-        raise HTTPException(status_code=404, detail="unknown project")
-    freed = 0
-    for tool in (await db.execute(select(Tool).where(Tool.project_id == project_id))).scalars().all():
-        tool.project_id = None
-        freed += 1
-    for m in (await db.execute(select(Membership).where(Membership.org_id == org_id))).scalars().all():
-        if m.project_access and project_id in m.project_access:
-            # Store the remaining ids AS THEY ARE, empty list included. Collapsing `[]` to NULL here
-            # would read as "every project" and hand a member scoped to only this project access to
-            # every OTHER project's tools — a privilege escalation triggered by an unrelated delete.
-            # `[]` is already the right meaning: org-wide tools only, which now include the freed ones.
-            m.project_access = [p for p in m.project_access if p != project_id]
-    # A rule scoped to this project can never fire again — and DenyRule.project_id is a foreign key,
-    # so a surviving row would dangle (Postgres rejects that; SQLite only hides it). Same sweep-on-
-    # departure idiom as _drop_member_deny_rules.
-    for rule in (await db.execute(select(DenyRule).where(
-            DenyRule.project_id == project_id))).scalars().all():
-        await db.delete(rule)
-    await db.delete(project)
-    await db.commit()
-    return {"deleted": project_id, "tools_made_org_wide": freed}
+router.routes.extend(org_routes.projects_router.routes)
 
 
 # ---- deny rules: org policy over what may be called ----------------------------------------
-PROXY_METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS")
-
-
-class DenyRuleIn(BaseModel):
-    host: str = ""  # a bare netloc or a full URL (we take its host)
-    path_prefix: str = ""
-    method: str = ""
-    user_id: int | None = None  # None = the whole org; set = only that member/agent
-    project_id: int | None = None  # None = any tool; set = only calls through that project's tools
-    note: str = ""
 
 
 
 
-def _deny_view(r: DenyRule) -> dict:
-    return {"id": r.id, "host": r.host, "path_prefix": r.path_prefix, "method": r.method,
-            "user_id": r.user_id, "scope": "org" if r.user_id is None else "member",
-            "project_id": r.project_id,
-            "verdict": r.verdict, "note": r.note, "created_by": r.created_by,
-            "created_at": r.created_at}
+
+
 
 
 class CapabilityPinIn(BaseModel):
@@ -2115,89 +1680,7 @@ async def clear_capability_pin(
     return {"capability": capability, "pinned": False}
 
 
-@app.post("/orgs/{org_id}/deny")
-async def create_deny_rule(
-    org_id: int, body: DenyRuleIn,
-    caller: Caller = Depends(require_member), db: AsyncSession = Depends(get_session),
-) -> dict:
-    """Block calls to a host / path / method for the whole team, or for one member or agent (admin+).
-
-    Enforced on the proxy AND both run tiers, and it applies to every role including owner — a deny
-    rule is a guardrail, not a permission tier."""
-    _require_admin_of(org_id, caller)
-    host = (body.host or "").strip().lower()
-    if "://" in host:  # pasting a base_url is the obvious thing to try, so accept it
-        host = urlsplit(host).netloc.lower()
-    method = (body.method or "").strip().upper()
-    path_prefix = (body.path_prefix or "").strip()
-    if method and method not in PROXY_METHODS:
-        raise HTTPException(status_code=422, detail=f"method must be one of {list(PROXY_METHODS)}")
-    if not (host or path_prefix or method):
-        # An all-empty rule matches every request — refuse it rather than silently freezing the org.
-        raise HTTPException(status_code=422, detail="give at least one of host, path_prefix or method")
-    if body.user_id is not None:
-        target = (await db.execute(select(Membership).where(
-            Membership.org_id == org_id, Membership.user_id == body.user_id))).scalar_one_or_none()
-        if target is None:
-            raise HTTPException(status_code=404, detail="not a member of this org")
-    if body.project_id is not None:
-        project = await db.get(Project, body.project_id)
-        if project is None or project.org_id != org_id:  # 404 across orgs, like everywhere else
-            raise HTTPException(status_code=404, detail="unknown project")
-    rule = DenyRule(org_id=org_id, user_id=body.user_id, project_id=body.project_id,
-                    host=host, path_prefix=path_prefix,
-                    method=method, note=(body.note or "").strip(), created_by=caller.email)
-    db.add(rule)
-    await db.commit()
-    await db.refresh(rule)
-    return _deny_view(rule)
-
-
-@app.get("/orgs/{org_id}/deny")
-async def list_deny_rules(
-    org_id: int, caller: Caller = Depends(require_member), db: AsyncSession = Depends(get_session)
-) -> list[dict]:
-    _require_admin_of(org_id, caller)
-    rules = (await db.execute(select(DenyRule).where(DenyRule.org_id == org_id))).scalars().all()
-    return [_deny_view(r) for r in rules]
-
-
-@app.get("/orgs/{org_id}/policy/cli-deny")
-async def list_cli_deny(
-    org_id: int, caller: Caller = Depends(require_member), db: AsyncSession = Depends(get_session)
-) -> list[dict]:
-    """READ-ONLY: every CLI tool's effective argv deny patterns, so the Policy screen can show the
-    whole "what is blocked" picture in one place. These live on the TOOL (treg.json `cli.deny` +
-    catalog defaults, see `localrun.effective_profile`), not in the DenyRule table — editing them
-    means editing the skill or the catalog, which is why this endpoint only reports (admin+)."""
-    _require_admin_of(org_id, caller)
-    from . import providers as prov
-    out: list[dict] = []
-    tools = (await db.execute(select(Tool).where(Tool.org_id == org_id))).scalars().all()
-    for tool in tools:
-        profile = localrun.effective_profile(tool, (prov.match_skill(tool.name) or {}).get("cli"))
-        if not profile or not profile.get("deny"):
-            continue
-        own = set(profile.get("_own_deny") or [])
-        out.append({"tool": tool.name, "enabled": bool(profile.get("enabled")),
-                    "patterns": [{"pattern": p,
-                                  "source": "skill" if p in own else "catalog"}
-                                 for p in profile["deny"]]})
-    return out
-
-
-@app.delete("/orgs/{org_id}/deny/{rule_id}")
-async def delete_deny_rule(
-    org_id: int, rule_id: int,
-    caller: Caller = Depends(require_member), db: AsyncSession = Depends(get_session),
-) -> dict:
-    _require_admin_of(org_id, caller)
-    rule = await db.get(DenyRule, rule_id)
-    if rule is None or rule.org_id != org_id:  # 404 across orgs — never confirm another org's ids
-        raise HTTPException(status_code=404, detail="unknown rule")
-    await db.delete(rule)
-    await db.commit()
-    return {"deleted": rule_id}
+router.routes.extend(org_routes.policy_router.routes)
 
 
 # ---- secrets (values are write-only — never returned) -------------------------------------
@@ -4919,13 +4402,11 @@ META_HEADER = "x-treg-meta"
 _META_MAX_KEYS = 5
 _META_MAX_HEADER = 512
 _META_MAX_VALUE = 128
-_META_KEY_RE = re.compile(r"^[a-z0-9_]{1,32}$")
 # Tag VALUES become storage keys (the idempotency scope, a TagBudget row, a TagSpend row), so the
 # charset is an allowlist rather than a length check. See the collision note in `_parse_call_meta`.
 _META_VALUE_RE = re.compile(r"^[A-Za-z0-9._:-]{1,%d}$" % _META_MAX_VALUE)
 # The dimension that scopes idempotency and defaults reports, for a team that never declared one.
 DEFAULT_PRIMARY_DIM = "customer"
-_MAX_BUDGET_DIMS = 3        # each declared dimension = one indexed lookup per call + a row per value
 _MAX_TAG_VALUES = 10_000    # distinct values per dimension per org, bounded at WRITE (see _tag_budget)
 
 
@@ -4996,11 +4477,6 @@ def _validate_tag_pair(key: str, value: str, *, where: str = "tag") -> tuple[str
             f"{where} value for {key!r} may only contain letters, digits and . _ - : "
             f"(these ids are used as storage keys)"))
     return key, value
-
-
-# Agent pins share the call-header storage-key rules until Stage 4 extracts caller metadata ownership.
-org_routes._META_MAX_KEYS = _META_MAX_KEYS
-org_routes._validate_tag_pair = _validate_tag_pair
 
 
 def _parse_call_meta(request: Request, caller: Caller | None = None) -> CallMeta:
@@ -5491,11 +4967,6 @@ def _month_start_utc() -> datetime:
     return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
 
-# The reserved value standing for "every value of this dimension". Safe forever because the tag
-# value charset (`_META_VALUE_RE`) excludes `*`, so no caller can send a value that collides with it.
-TAG_DEFAULT = "*"
-
-
 async def _resolve_tag_budget(db: AsyncSession, org_id: int, dim: str, val: str) -> TagBudget | None:
     """The limit in force for one tag value: its own override, else the dimension's default, else
     none (unlimited — the shipped state, until a team sets a default).
@@ -5537,6 +5008,15 @@ async def _tag_budget(db: AsyncSession, org_id: int, dim: str, val: str,
     db.add(row)
     await db.commit()
     return row
+
+
+# Governance routes and agent pins share call-path rules until Stage 4 extracts caller metadata ownership.
+org_routes._META_MAX_KEYS = _META_MAX_KEYS
+org_routes._validate_tag_pair = _validate_tag_pair
+org_routes._primary_dim_of = _primary_dim_of
+org_routes._budget_dims_of = _budget_dims_of
+org_routes._effective_daily_cap = _effective_daily_cap
+org_routes._tag_budget = _tag_budget
 
 
 async def _enforce_tag_budgets(caller: Caller, meta: CallMeta, db: AsyncSession,

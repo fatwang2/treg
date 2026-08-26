@@ -126,7 +126,7 @@ Regenerate via `scripts/build-map.py`.
 | `src/treg/routers/auth.py` | architecture/composition.md, architecture/mcp-oauth.md, architecture/multi-tenancy.md, interface/api.md, interface/onboarding.md |
 | `src/treg/routers/auth_helpers.py` | interface/api.md |
 | `src/treg/routers/catalog.py` | architecture/catalog.md, interface/api.md |
-| `src/treg/routers/orgs.py` | architecture/composition.md, architecture/multi-tenancy.md, interface/api.md |
+| `src/treg/routers/orgs.py` | architecture/composition.md, architecture/money.md, architecture/multi-tenancy.md, interface/api.md |
 | `src/treg/routers/signup_cookies.py` | interface/api.md |
 | `src/treg/routers/web.py` | architecture/composition.md, interface/api.md, interface/dashboard.md, interface/landing-sandbox.md, interface/seo.md |
 | `src/treg/runner.py` | interface/api.md |
@@ -168,7 +168,7 @@ Regenerate via `scripts/build-map.py`.
 | `architecture/local-proxy.md` | `localproxy.py`, `server.js` |
 | `architecture/local-run.md` | `localrun.py`, `egress.py`, `fsjail.py` |
 | `architecture/mcp-oauth.md` | `auth.py`, `mcp.py`, `mcp_oauth.py`, `health.py`, `mcp_oauth.py`, `session.py`, `auth.py`, `connect-demo.html` |
-| `architecture/money.md` | `ledger.py`, `models.py`, `billing.py`, `reconcile.py`, `referrals.py`, `api.py`, `signup.py`, `admin.py` |
+| `architecture/money.md` | `ledger.py`, `models.py`, `billing.py`, `reconcile.py`, `referrals.py`, `api.py`, `signup.py`, `admin.py`, `orgs.py` |
 | `architecture/multi-tenancy.md` | `models.py`, `api.py`, `caller_metadata.py`, `auth.py`, `signup.py`, `teams.py`, `access.py`, `session.py`, `auth.py`, `orgs.py`, `db.py`, `test_router_dependencies.py` |
 | `architecture/proxy-model.md` | `proxy.py`, `api.py` |
 | `architecture/super-admin.md` | `api.py`, `admin.py`, `access.py`, `config.py` |

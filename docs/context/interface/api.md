@@ -110,7 +110,8 @@ pages. `application.auth` builds each authorization request, exchanges the provi
 the proven email, provisions the user, and commits before returning a framework-neutral proof. Its
 callbacks pop `_cli_states` only after that commit. The session-identity block translates
 `application.auth.current_identity` for `/auth/me`; `/auth/logout` remains an HTTP-only cookie action.
-`routers.orgs` translates signup, team-entry, invite-lifecycle, member-management, and machine-identity HTTP. `application.signup` owns the two creation
+`routers.orgs` translates signup, team-entry, invite-lifecycle, member-management, machine-identity,
+project, policy, settings, usage, and budget HTTP. `application.signup` owns the two creation
 transactions and their promo, conversion, and referral sequence; `domain.governance.teams` owns team
 slug and membership creation plus the team-switcher read model.
 

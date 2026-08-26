@@ -147,7 +147,8 @@ identity classification. `api.py` re-exports the same objects so existing caller
 retain their import path while route definitions move out incrementally. Session signing and validation
 live beside it in `domain.identity.session`; `treg.session` remains a compatibility alias, while runtime
 owners use the domain path. The former transitional `routers.dependencies` module is deleted.
-`routers.orgs` owns signup, team-entry, invite-lifecycle, member-management, and machine-identity HTTP translation. `application.signup` owns the signup sessions,
+`routers.orgs` owns signup, team-entry, invite-lifecycle, member-management, machine-identity, project,
+policy, settings, usage, and budget HTTP translation. `application.signup` owns the signup sessions,
 commits, attribution, referral sequencing, and promotional grant; `domain.governance.teams` owns slug,
 Org and Membership creation rules, and the team-switcher read model.
 - **Registration is shared across doors:** `application.signup.find_or_create_user(db, email)` finds a user or creates them
