@@ -36,13 +36,8 @@ related:
 
 # The API
 
-Route definitions live on `api.router`; login, session, invite, OAuth-server, and grant-management blocks
-are defined in `routers.auth`; the open Catalog JSON block is defined in `routers.catalog`; the
-three presentation blocks are defined in `routers.web`; connection lifecycle and health are defined in
-`routers.connections`; and the cross-tenant admin read, mutation,
-and report blocks are defined in `routers.admin`.
-`api.py` attaches each block at its original registration point. `bootstrap.create_app()` assembles
-the combined route table into FastAPI roles.
+`api.router` preserves public registration order while concern routers contribute ordered route blocks.
+`bootstrap.create_app()` assembles the combined route table into FastAPI roles.
 `api.app` remains the deployed, backward-compatible `all` role. Everything the CLI + skill do is one
 HTTP call over this. The factory lifespan
 runs `init_db()`, then `_backfill_provider_extra_tools()` (the idempotent repair for provider registry
@@ -76,8 +71,7 @@ falls through and finds no usable marketplace credential. A genuine URL-passthro
 with the names of the colliding usable tools and the explicit `/call/<name>/<path>` escape hatch.
 
 ## Auth
-The shared identity/access dependency family is defined in `domain.identity.access` and re-exported by
-`api.py` during the staged route migration. `require_member()` reads the `X-Treg-Token` header, hashes it
+`require_member()` reads the `X-Treg-Token` header, hashes it
 (`crypto.hash_token`), looks up the
 `Membership` by `token_hash`, and returns a `Caller` (`membership, user, org` + `org_id`/`email`/`role`);
 401 on missing/invalid. Every scoped endpoint depends on it **except** `POST /users` + `POST
@@ -86,43 +80,22 @@ Authz = org scoping + a role gate: `_can_manage` lets admin/owner manage any org
 what they created; `_require_admin_of` gates the org-admin endpoints. See
 [multi-tenancy](../architecture/multi-tenancy.md).
 
-Cookie mechanics stay at the HTTP boundary: OAuth return-path parking lives in
-`routers.auth_helpers`, and signup referral parking lives in `routers.signup_cookies`. Neither helper
-belongs to the identity domain because both interpret request cookies and the referral helper also
-normalizes through the referrals subsystem. The shared `_same_origin` CSRF check also lives in
-`routers.auth_helpers`, so cookie-authenticated mutations can reuse it without a router importing the
-legacy API module.
+Cookie mechanics stay at the HTTP boundary because they interpret request cookies; the shared
+`_same_origin` CSRF check is available to every cookie-authenticated mutation.
 
-The email OTP endpoints call `application.auth.start_email_login` and `verify_email_login`; invite sign-in
-calls `invite_signin_landing` and `confirm_invite_signin`. These application use cases open their sessions
-and own every commit, including OTP rate, attempt, consumption, user provisioning, and invite-token
-consumption. They return framework-neutral results or semantic errors; `routers.auth` alone maps those
-outcomes to the existing HTTP responses and sets browser cookies. Shared first-proof provisioning lives
-in `application.signup.find_or_create_user` so every identity door reuses the same command.
+Email OTP and invite sign-in use cases own their sessions and every commit, including OTP rate, attempt,
+consumption, user provisioning, and invite-token consumption. They return framework-neutral results or
+semantic errors; the HTTP boundary maps them to responses and sets browser cookies. Every identity door
+reuses the same first-proof provisioning command.
 
-The CLI pairing endpoints, team picker, and `/login` presentation live in a second ordered router
-block in `routers.auth`. Their state machine lives in `application.auth`: start prunes and creates the
-pending entry, poll pops a completed result exactly once, and approve preserves the session lookup,
-attempt decrement, pending pop, and result publication order. The application use case also opens the
-read-only sessions used for team selection and approval; it performs no database writes or commits.
-The three short-lived process-local dictionaries live with that state machine rather than at the HTTP
-boundary. Router and API compatibility aliases reference the same dictionary objects, so social-login
-callbacks and existing tests cannot split handshake state through a copy or rebind.
+The CLI pairing state machine prunes before creating a pending entry, pops a completed result exactly
+once, and preserves session lookup, attempt decrement, pending pop, and result publication order. Its
+team-selection sessions are read-only. The three short-lived dictionaries are process-local and shared
+by every pairing door.
 
-The social-login router owns GitHub/Google cookies, redirects, callback-host selection, and HTML error
-pages. `application.auth` builds each authorization request, exchanges the provider code, validates
-the proven email, provisions the user, and commits before returning a framework-neutral proof. Its
-callbacks pop `_cli_states` only after that commit. The session-identity block translates
-`application.auth.current_identity` for `/auth/me`; `/auth/logout` remains an HTTP-only cookie action.
-`routers.orgs` translates signup, team-entry, invite-lifecycle, member-management, machine-identity,
-project, policy, settings, usage, and budget HTTP; `routers.resources` translates secret, tool, skill,
-and bundle HTTP. `application.signup` owns the two creation
-transactions and their promo, conversion, and referral sequence; `domain.governance.teams` owns team
-slug and membership creation plus the team-switcher read model.
-
-`application.connect` owns OAuth-start, OAuth-callback, pasted-token, status, resource discovery and
-selection, extra-credential, revoke, health, and provider-companion backfill sessions and commit
-ordering. Provider requests use the shared HTTP client supplied by `routers.connections`.
+Social login builds each authorization request, exchanges the provider code, validates the proven
+email, provisions the user, and commits before publishing a CLI result. Provider callback state is
+validated before resolving the shared HTTP client. `/auth/logout` remains an HTTP-only cookie action.
 
 ## Endpoints
 - **Users / orgs:** `register_user` (`POST /users`, open, legacy — used by the test fixture) creates the

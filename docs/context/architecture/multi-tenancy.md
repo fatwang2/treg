@@ -142,18 +142,11 @@ pair, so every list/create/mutation and the proxy are scoped to the caller's org
   `owner = caller.email`; `_resolve_call` scopes **both** the named lookup and the host/longest-prefix
   passthrough to the org; `call_tool` loads only same-org secrets. See [proxy-model](proxy-model.md).
 
-The shared identity and access family lives in `domain.identity.access`: `Caller`, token/session/org
-resolution, `require_identity`, `require_member`, `require_superadmin`, role comparison, and machine
-identity classification. `api.py` re-exports the same objects so existing callers and route definitions
-retain their import path while route definitions move out incrementally. Session signing and validation
-live beside it in `domain.identity.session`; `treg.session` remains a compatibility alias, while runtime
-owners use the domain path. The former transitional `routers.dependencies` module is deleted.
-`routers.orgs` owns signup, team-entry, invite-lifecycle, member-management, machine-identity, project,
-policy, settings, usage, and budget HTTP translation. `application.signup` owns the signup sessions,
-commits, attribution, referral sequencing, and promotional grant; `domain.governance.teams` owns slug,
-Org and Membership creation rules, and the team-switcher read model.
+`domain.identity.access` is the shared identity/access boundary: `Caller`, token/session/org resolution,
+dependencies, role comparison, and machine classification. Session signing and validation live in
+`domain.identity.session`.
 - **Registration is shared across doors:** `application.signup.find_or_create_user(db, email)` finds a user or creates them
-  — **the user ONLY, no auto personal org** (as of the no-personal-org change). Every identity door calls
+  — **the user ONLY, no auto personal org**. Every identity door calls
   it (GitHub / Google callbacks, email OTP), so "first proof = registration" is identical. A brand-new
   user therefore lands with **zero teams** and must name + create their first one (the dashboard's
   mandatory welcome, or `treg org create`); their identity token is user-scoped so it works before any

@@ -22,15 +22,9 @@ related:
 
 # Application composition
 
-`bootstrap.create_app(role)` is the FastAPI composition root. `api.py` hosts the ordered route table;
-the auth module defines login, session, invite, user-token, OAuth-server, and grant-management blocks;
-the org module defines signup, team-entry, invite-lifecycle, member-management, machine-identity,
-project, policy, settings, usage, and budget blocks; the resources module defines secret, tool, skill,
-and bundle blocks; the connections module defines connection lifecycle and health blocks; the
-Catalog and web modules define their concern-specific blocks; and the admin
-module defines read, mutation, and report blocks that `api.py`
-appends at their legacy registration points. It then calls the factory once at EOF so the deployed
-and documented `treg.api:app` import path remains the default `all` role.
+`bootstrap.create_app(role)` is the FastAPI composition root. `api.py` hosts the ordered route table,
+attaches concern routers at compatibility-sensitive registration points, and calls the factory once at
+EOF so the deployed `treg.api:app` import path remains the default `all` role.
 
 The factory owns concrete assembly: the three pure-ASGI middleware registrations, five exception handlers,
 static mounts, optional MCP mount and lifespan, GET-to-HEAD widening, the OpenAPI wrapper that hides
@@ -85,7 +79,3 @@ Each factory call must produce an independent app whose dependency overrides bel
 at the new FastAPI instance, and rebuilds its request handler. This also avoids the internal
 `_IncludedRouter` wrapper added by the current FastAPI `include_router()` implementation, which would
 otherwise change route inspection and the committed surface snapshot.
-
-`scripts.dump_surface._lifespan` records the optional MCP lifespan condition against
-`treg.bootstrap._mcp`, where optional MCP composition now lives. This is a documentation-only snapshot
-correction; the mounted lifespan behavior is unchanged.

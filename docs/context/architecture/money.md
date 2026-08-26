@@ -536,9 +536,8 @@ ordered so a tag refusal can never fall through to the org 402.
 
 `GET /orgs/{id}/usage/by-tag` takes **money from the ledger** and call counts from `CallRecord`. Audit
 rows are fire-and-forget and the queue sheds them under exactly the load a successful builder
-generates; an invoice built on them would under-bill silently and unrecoverably. The HTTP report lives
-in `routers.orgs`; the money query lives in `ledger.py`, so a later edit cannot casually reach for
-`CallRecord`.
+generates; an invoice built on them would under-bill silently and unrecoverably. The money query lives
+in `ledger.py`, so presentation code cannot casually reach for `CallRecord`.
 
 The response reports **`unattributed_micro`** explicitly rather than dropping it. The identity a
 builder's books rest on is `attributed + unattributed == the org's settled spend for the window`, and
